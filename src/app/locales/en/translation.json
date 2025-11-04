@@ -1,0 +1,32 @@
+{
+  "header": {
+    "home": "Home",
+    "menu": "Menu",
+    "offers": "Offers",
+    "orders": "My Orders",
+    "contact": "Address",
+    "add-item": "Add Item",
+    "searchPlaceholder": "Search for delicious food...",
+    "notifications": "Notifications",
+    "cartItems": "Cart Items",
+    "newNotifications": "2 new",
+    "language": {
+      "english": "English",
+      "igbo": "Igbo"
+    }
+  },
+  "footer": {
+    "brandDescription": "Your one-stop shop for delicious meals delivered to your door.",
+    "quickLinks": "Quick Links",
+    "followUs": "Follow Us",
+    "copyright": "© {year} FoodieHub. All rights reserved.",
+    "language": {
+      "english": "English",
+      "igbo": "Igbo"
+    }
+  },
+  "home": {
+    "welcome": "Welcome to FoodieHub",
+    "description": "Order your favorite meals with ease and have them delivered to your door."
+  }
+}

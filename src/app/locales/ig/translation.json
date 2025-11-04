@@ -1,0 +1,32 @@
+{
+  "header": {
+    "home": "Ụlọ",
+    "menu": "Nri",
+    "offers": "Onyinye",
+    "orders": "Iwu",
+    "contact": "Adresị",
+    "add-item": "Tinye Ihe",
+    "searchPlaceholder": "Chọọ nri dị ụtọ...",
+    "notifications": "Ọkwa",
+    "cartItems": "Ihe Cart",
+    "newNotifications": "2 ọhụrụ",
+    "language": {
+      "english": "Bekee",
+      "igbo": "Igbo"
+    }
+  },
+  "footer": {
+    "brandDescription": "Ụlọ ahịa gị maka nri dị ụtọ nke a na-ebuga n'ọnụ ụzọ gị.",
+    "quickLinks": "Njikọ Ngwa ngwa",
+    "followUs": "Soro Anyị",
+    "copyright": "© {year} FoodieHub. Ikike niile echekwara.",
+    "language": {
+      "english": "Bekee",
+      "igbo": "Igbo"
+    }
+  },
+  "home": {
+    "welcome": "Nabata na FoodieHub",
+    "description": "Nye iwu nri ị kacha amasị gị n'ụzọ dị mfe ma mee ka ebuga ha n'ọnụ ụzọ gị."
+  }
+}
