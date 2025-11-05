@@ -26,15 +26,6 @@ import { branches } from "../../../data/branches";
 import { useRouter } from "next/navigation";
 import { usePayment } from "@/context/paymentContext";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import OrderFeedbackModal from "../myorders/[orderId]/OrderFeedbackModal";
@@ -108,7 +99,7 @@ export default function OrderConfirmation() {
 
     const safeTotal = latestOrder.total ?? 0;
     const safeDeliveryFee = latestOrder.deliveryFee ?? 0;
-    const amountToPay = isCash ? safeTotal - safeDeliveryFee : safeTotal;
+    const amountToPay = isCash ? safeTotal : safeTotal + safeDeliveryFee;
 
     payWithPaystack({
       email: user?.email || "user@example.com",
@@ -179,7 +170,7 @@ export default function OrderConfirmation() {
 
   const safeTotal = latestOrder.total ?? 0;
   const safeDeliveryFee = latestOrder.deliveryFee ?? 0;
-  const displayAmount = isCash ? safeTotal - safeDeliveryFee : safeTotal;
+  const displayAmount = isCash ? safeTotal : safeTotal + safeDeliveryFee;
 
   /* --------------------------- Main UI --------------------------- */
   return (

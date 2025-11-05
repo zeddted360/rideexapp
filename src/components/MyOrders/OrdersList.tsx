@@ -17,12 +17,12 @@ import {
   Loader2,
   MapPin,
   Package,
+  Truck,
   XCircle,
 } from "lucide-react";
 import { branches } from "../../../data/branches";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { CreditCard } from "node-appwrite";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import Link from "next/link";
@@ -47,31 +47,21 @@ import OrderFeedbackModal from "@/app/myorders/[orderId]/OrderFeedbackModal";
 interface OrdersListProps {
   orders: IBookedOrderFetched[];
   onCancel: (orderId: string) => void;
+  onPayNow: (order: IBookedOrderFetched) => void;
   onReorder: (order: IBookedOrderFetched) => void;
-  paymentMethods: {
-    value: string;
-    label: string;
-  }[];
+  paying?: boolean;
 }
 
 const OrdersList = ({
   orders,
   onCancel,
+  onPayNow,
   onReorder,
-  paymentMethods,
+  paying = false,
 }: OrdersListProps) => {
-  const { payWithPaystack, paying, paymentError } = usePayment();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [orderToCancel, setOrderToCancel] =
     useState<IBookedOrderFetched | null>(null);
-  const [payDialogOpen, setPayDialogOpen] = useState(false);
-  const [orderToPay, setOrderToPay] = useState<IBookedOrderFetched | null>(
-    null
-  );
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
-    string | null
-  >(null);
-  const [updatingPayment, setUpdatingPayment] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [orderToFeedback, setOrderToFeedback] =
@@ -88,12 +78,6 @@ const OrdersList = ({
     setCancelDialogOpen(true);
   };
 
-  const handlePayClick = (order: IBookedOrderFetched) => {
-    setOrderToPay(order);
-    setSelectedPaymentMethod(order.paymentMethod);
-    setPayDialogOpen(true);
-  };
-
   const handleConfirmCancel = async () => {
     if (orderToCancel) {
       setCancelling(true);
@@ -107,33 +91,9 @@ const OrdersList = ({
     }
   };
 
-  const handlePaymentMethodChange = async (newMethod: string) => {
-    if (!orderToPay || orderToPay.paymentMethod === newMethod) return;
-    setUpdatingPayment(true);
-    try {
-      await dispatch(
-        updateBookedOrderAsync({
-          orderId: orderToPay.$id,
-          orderData: { paymentMethod: newMethod },
-        })
-      ).unwrap();
-      setSelectedPaymentMethod(newMethod);
-      toast.success("Payment method updated!");
-    } catch (err) {
-      toast.error("Failed to update payment method");
-    } finally {
-      setUpdatingPayment(false);
-    }
-  };
-
   const handleDialogChange = (open: boolean) => {
     setCancelDialogOpen(open);
     if (!open) setOrderToCancel(null);
-  };
-
-  const handlePayDialogChange = (open: boolean) => {
-    setPayDialogOpen(open);
-    if (!open) setOrderToPay(null);
   };
 
   if (orders.length === 0) {
@@ -150,21 +110,6 @@ const OrdersList = ({
       </motion.div>
     );
   }
-
-  const handlePayNow = async () => {
-    if (!orderToPay) return;
-    payWithPaystack({
-      email: user?.email || "user@example.com",
-      amount: orderToPay.total,
-      reference: orderToPay.orderId || orderToPay.$id,
-      orderId: orderToPay.$id,
-      onSuccess: () => {
-        setPayDialogOpen(false);
-        setOrderToPay(null);
-      },
-      onClose: () => {},
-    });
-  };
 
   const getStatusColor = (status: string) => {
     const colors = {
@@ -294,15 +239,15 @@ const OrdersList = ({
               const branch = branches.find(
                 (b) => b.id === order.selectedBranchId
               );
+              const isCash = order.paymentMethod === "cash";
               const canCancel = ["pending", "confirmed"].includes(order.status);
-              const canPay =
-                !order.paid &&
-                order.paymentMethod !== "cash" &&
-                !["delivered", "completed"].includes(order.status);
               const canReorder = ["completed", "cancelled", "failed"].includes(
                 order.status
               );
               const isDelivered = order.status === "delivered";
+              const showPayButton =
+                !order.paid &&
+                !["delivered", "completed", "cancelled"].includes(order.status);
 
               return (
                 <motion.div
@@ -370,6 +315,25 @@ const OrdersList = ({
                           </span>
                         </div>
 
+                        {isCash && (
+                          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
+                            <div className="flex items-center gap-3">
+                              <Truck className="w-5 h-5 text-orange-500" />
+                              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                                Delivery Fee
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                ₦{order.deliveryFee?.toLocaleString() ?? 0}
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400 block">
+                                Paid on delivery
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
                           <div className="flex items-center gap-2">
                             <CreditCardIcon className="w-4 h-4 text-orange-500" />
@@ -414,15 +378,30 @@ const OrdersList = ({
                             Leave Feedback
                           </Button>
                         )}
-                        {canPay && order.status !== "cancelled" && (
+                        {showPayButton && (
                           <Button
                             variant="default"
                             size="sm"
-                            onClick={() => handlePayClick(order)}
+                            onClick={() => onPayNow(order)}
+                            disabled={paying}
                             className="flex-1 min-w-[120px] rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 font-semibold"
                           >
-                            <CreditCardIcon className="w-4 h-4 mr-2" />
-                            Pay Now
+                            {paying ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <CreditCardIcon className="w-4 h-4 mr-2" />
+                                Pay Now
+                                {order.paymentMethod === "cash" && (
+                                  <span className="ml-2 text-xs opacity-90">
+                                    (Items only)
+                                  </span>
+                                )}
+                              </>
+                            )}
                           </Button>
                         )}
                         {canCancel && !order.paid && (
@@ -489,85 +468,6 @@ const OrdersList = ({
           onSubmit={handleFeedbackSubmit}
           riderCode={orderToFeedback?.riderCode}
         />
-
-        {/* Payment dialog */}
-        <Dialog open={payDialogOpen} onOpenChange={handlePayDialogChange}>
-          <DialogContent className="dark:bg-gray-800 rounded-2xl max-w-md">
-            <DialogHeader>
-              <DialogTitle className="dark:text-white text-xl font-bold">
-                Pay for Order
-              </DialogTitle>
-            </DialogHeader>
-            {orderToPay && (
-              <div className="space-y-4">
-                <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl">
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                    Total Amount
-                  </div>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    ₦{orderToPay.total?.toLocaleString()}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Payment Method
-                  </label>
-                  <select
-                    className="w-full rounded-xl border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white p-3 focus:ring-2 focus:ring-orange-500 outline-none"
-                    value={selectedPaymentMethod || orderToPay.paymentMethod}
-                    onChange={(e) => handlePaymentMethodChange(e.target.value)}
-                    disabled={updatingPayment}
-                  >
-                    {paymentMethods
-                      .filter((m) => m.value !== "cash")
-                      .map((method) => (
-                        <option key={method.value} value={method.value}>
-                          {method.label}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <Button
-                  className="w-full h-12 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl font-bold"
-                  onClick={handlePayNow}
-                  disabled={paying}
-                >
-                  {paying ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Processing Payment...
-                    </>
-                  ) : (
-                    <>
-                      <CreditCardIcon className="w-5 h-5 mr-2" />
-                      Pay ₦{orderToPay.total?.toLocaleString()}
-                    </>
-                  )}
-                </Button>
-
-                {paymentError && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
-                    <p className="text-sm text-red-600 dark:text-red-400">
-                      {paymentError}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-            <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-              <DialogClose asChild>
-                <Button
-                  variant="outline"
-                  className="w-full sm:w-auto h-11 rounded-xl"
-                >
-                  Close
-                </Button>
-              </DialogClose>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* Cancel Order Dialog */}
         <Dialog open={cancelDialogOpen} onOpenChange={handleDialogChange}>

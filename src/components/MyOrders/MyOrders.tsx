@@ -22,8 +22,9 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/authContext";
 import { client, validateEnv } from "@/utils/appwrite";
-import { motion} from "framer-motion";
+import { motion } from "framer-motion";
 import OrdersList from "./OrdersList";
+import { usePayment } from "@/context/paymentContext";
 
 const ORDER_STATUS_TABS: {
   key: OrderStatus | "completed" | "all";
@@ -46,16 +47,11 @@ const MyOrders = () => {
   const { orders, loading, error } = useSelector(
     (state: RootState) => state.bookedOrders
   );
+  const { payWithPaystack, paying } = usePayment();
   const [activeTab, setActiveTab] = useState<OrderStatus | "completed" | "all">(
     "all"
   );
-
-  const paymentMethods = [
-    { value: "card", label: "Card" },
-    { value: "transfer", label: "Bank Transfer" },
-    { value: "wallet", label: "Wallet" },
-    { value: "cash", label: "Cash on Delivery" },
-  ];
+  const { user } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated && userId) {
@@ -105,6 +101,25 @@ const MyOrders = () => {
       toast.error("Failed to cancel order");
       console.error("Error cancelling order:", error);
     }
+  };
+
+  const handlePayNow = (order: IBookedOrderFetched) => {
+    const safeTotal = order.total ?? 0;
+    const safeDeliveryFee = order.deliveryFee ?? 0;
+    const isCash = order.paymentMethod === "cash";
+    const amountToPay = isCash ? safeTotal : safeTotal + safeDeliveryFee;
+
+    payWithPaystack({
+      email: user?.email || "user@example.com",
+      amount: amountToPay,
+      reference: order.orderId || order.$id,
+      orderId: order.$id,
+      onSuccess: () => {
+        toast.success("Payment successful!");
+        dispatch(fetchBookedOrdersByUserId(userId!)); // Refresh orders
+      },
+      onClose: () => {},
+    });
   };
 
   const handleReorder = (order: IBookedOrderFetched) => {
@@ -304,8 +319,9 @@ const MyOrders = () => {
             <OrdersList
               orders={getFilteredOrders(activeTab)}
               onCancel={handleCancelOrder}
+              onPayNow={handlePayNow}
               onReorder={handleReorder}
-              paymentMethods={paymentMethods}
+              paying={paying}
             />
           </>
         )}

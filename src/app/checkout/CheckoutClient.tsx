@@ -120,16 +120,7 @@ export default function CheckoutClient() {
     [selectedBranch]
   );
 
-  // Redirect if no orders in cart
-  useEffect(() => {
-    if (orders.length === 0 && !isPlacingOrder) {
-      toast("Your cart is empty. Redirecting back to the home...", {
-        duration: 4000,
-      });
-      router.push("/");
-    }
-  }, [orders.length, router, isPlacingOrder]);
-
+ 
   // Debounce address using standard useEffect
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -474,7 +465,14 @@ export default function CheckoutClient() {
 
   // Handle place order
   const handlePlaceOrder = useCallback(() => {
+    if (orders.length === 0) {
+      toast("Your cart is empty. Redirecting back to the home...", {
+        duration: 4000,
+      });
+      router.push("/");
+    } else {
     setShowConfirmation(true);
+    }
   }, []);
 
   // Helper to parse distance in km
