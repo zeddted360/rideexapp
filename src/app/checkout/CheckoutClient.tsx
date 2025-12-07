@@ -21,7 +21,9 @@ import {
   IBookedOrderFetched,
   IRestaurantFetched,
 } from "../../../types/types";
-import { calculateDeliveryFee } from "@/utils/deliveryFeeCalculator";
+// import { calculateDeliveryFee } from "@/utils/deliveryFeeCalculator";
+
+import { calculateDeliveryFeeSimple } from "@/utils/deliveryFeeCalculator";
 import { Loader } from "@googlemaps/js-api-loader";
 import { useRouter } from "next/navigation";
 import { deleteOrderAsync, resetOrders } from "@/state/orderSlice";
@@ -49,6 +51,7 @@ import {
 import toast from "react-hot-toast";
 
 export default function CheckoutClient() {
+  const SERVICE_CHARGE = 200; // Fixed platform fee
   const [selectedBranch, setSelectedBranch] = useState(1);
   const [deliveryDay, setDeliveryDay] = useState<"today" | "tomorrow">("today");
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>("");
@@ -120,7 +123,6 @@ export default function CheckoutClient() {
     [selectedBranch]
   );
 
- 
   // Debounce address using standard useEffect
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -253,10 +255,50 @@ export default function CheckoutClient() {
   }, [orders]);
 
   // Calculate delivery fee
+  // useEffect(() => {
+  //   const calculateFee = async () => {
+  //     if (!debouncedAddress.trim() || !selectedBranchData || !orders.length) {
+  //       setDeliveryFee(333);
+  //       setDeliveryDistance("");
+  //       setDeliveryDuration("");
+  //       return;
+  //     }
+
+  //     setIsCalculatingFee(true);
+  //     try {
+  //       const result = await calculateDeliveryFee(
+  //         debouncedAddress,
+  //         selectedBranchData,
+  //         restaurantAddresses
+  //       );
+  //       setDeliveryFee(result.fee);
+  //       setDeliveryDistance(result.distance);
+  //       setDeliveryDuration(result.duration);
+  //     } catch (error) {
+  //       console.error("Fee calculation error:", error);
+  //       handleError("Failed to calculate delivery fee. Using default fee.");
+  //       setDeliveryFee(1000);
+  //       setDeliveryDistance("");
+  //       setDeliveryDuration("");
+  //     } finally {
+  //       setIsCalculatingFee(false);
+  //     }
+  //   };
+
+  //   calculateFee();
+  // }, [
+  //   debouncedAddress,
+  //   selectedBranchData,
+  //   restaurantAddresses,
+  //   orders.length,
+  //   handleError,
+  // ]);
+
+  // Calculate delivery fee + show service charge
   useEffect(() => {
     const calculateFee = async () => {
-      if (!debouncedAddress.trim() || !selectedBranchData || !orders.length) {
-        setDeliveryFee(333);
+      if (!debouncedAddress.trim() || !selectedBranchData) {
+        setDeliveryFee(800);
         setDeliveryDistance("");
         setDeliveryDuration("");
         return;
@@ -264,33 +306,46 @@ export default function CheckoutClient() {
 
       setIsCalculatingFee(true);
       try {
-        const result = await calculateDeliveryFee(
-          debouncedAddress,
-          selectedBranchData,
-          restaurantAddresses
+        const origin = encodeURIComponent(
+          selectedBranchData.address + ", Nigeria"
         );
-        setDeliveryFee(result.fee);
-        setDeliveryDistance(result.distance);
-        setDeliveryDuration(result.duration);
+        const destination = encodeURIComponent(debouncedAddress + ", Nigeria");
+
+        const res = await fetch(
+          `/api/distance-matrix?origins=${origin}&destinations=${destination}`
+        );
+        const data = await res.json();
+
+        if (data.status !== "OK" || !data.rows[0]?.elements[0]?.distance) {
+          throw new Error("Invalid distance");
+        }
+
+        const distanceMeters = data.rows[0].elements[0].distance.value;
+        const distanceText = data.rows[0].elements[0].distance.text;
+        const durationText = data.rows[0].elements[0].duration.text;
+
+        const feeResult = calculateDeliveryFeeSimple(distanceMeters, true);
+
+        if (!feeResult.isDeliverable) {
+          setShowDistanceExceededModal(true);
+          setDeliveryFee(0);
+        } else {
+          setDeliveryFee(feeResult.deliveryFee);
+        }
+
+        setDeliveryDistance(distanceText);
+        setDeliveryDuration(durationText);
       } catch (error) {
-        console.error("Fee calculation error:", error);
-        handleError("Failed to calculate delivery fee. Using default fee.");
-        setDeliveryFee(1000);
-        setDeliveryDistance("");
-        setDeliveryDuration("");
+        console.error("Fee error:", error);
+        handleError("Using estimated delivery fee");
+        setDeliveryFee(2000);
       } finally {
         setIsCalculatingFee(false);
       }
     };
 
     calculateFee();
-  }, [
-    debouncedAddress,
-    selectedBranchData,
-    restaurantAddresses,
-    orders.length,
-    handleError,
-  ]);
+  }, [debouncedAddress, selectedBranchData, handleError]);
 
   // Handle payment method change for cash modal
   useEffect(() => {
@@ -471,7 +526,7 @@ export default function CheckoutClient() {
       });
       router.push("/");
     } else {
-    setShowConfirmation(true);
+      setShowConfirmation(true);
     }
   }, []);
 
@@ -498,7 +553,7 @@ export default function CheckoutClient() {
 
     // Check delivery distance
     const distanceKm = parseDistanceKm(deliveryDistance);
-    if (distanceKm > 30) {
+    if (distanceKm > 18) {
       setShowDistanceExceededModal(true);
       return;
     }

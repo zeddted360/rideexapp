@@ -67,7 +67,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
   };
 
   const whatsappMessage = `Hello! I need support with my order #${
-    currentOrder.orderNumber || currentOrder._id
+    currentOrder.riderCode || currentOrder._id
   } from ${branchName}.`;
 
   return (
@@ -103,7 +103,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
                   <button
                     onClick={() =>
                       copyToClipboard(
-                        currentOrder.orderNumber || currentOrder._id,
+                        currentOrder.riderCode || currentOrder._id,
                         "order"
                       )
                     }

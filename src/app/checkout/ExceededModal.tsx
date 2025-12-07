@@ -16,7 +16,7 @@ const ExceededModal: FC<ExceedModalProps> = ({
           Delivery Unavailable
         </h3>
         <p className="mb-6 text-gray-700 dark:text-gray-300">
-          Sorry, the delivery distance exceeds 30km ({deliveryDistance}). We
+          Sorry, the delivery distance exceeds 18km ({deliveryDistance}). We
           currently do not deliver to locations beyond 30km from the restaurant.
           Please select a closer delivery address.
         </p>
