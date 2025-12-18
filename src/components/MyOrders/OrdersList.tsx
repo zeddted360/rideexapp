@@ -1,5 +1,5 @@
-import { usePayment } from "@/context/paymentContext";
-import { IBookedOrderFetched } from "../../../types/types";
+"use client";
+
 import React, { useState } from "react";
 import { AppDispatch } from "@/state/store";
 import { useDispatch } from "react-redux";
@@ -13,12 +13,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
   Clock,
-  CreditCardIcon,
+  CreditCard as CreditCardIcon,
   Loader2,
   MapPin,
   Package,
   Truck,
   XCircle,
+  CheckCircle,
 } from "lucide-react";
 import { branches } from "../../../data/branches";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -40,9 +41,12 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "../ui/tooltip"; // Assuming shadcn/ui tooltip; adjust path if needed
+} from "../ui/tooltip";
 import { useRouter } from "next/navigation";
 import OrderFeedbackModal from "@/app/myorders/[orderId]/OrderFeedbackModal";
+import { IBookedOrderFetched } from "../../../types/types";
+
+const SERVICE_CHARGE = 200; // Must match CheckoutClient & MyOrders
 
 interface OrdersListProps {
   orders: IBookedOrderFetched[];
@@ -69,6 +73,7 @@ const OrdersList = ({
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useAuth();
   const router = useRouter();
@@ -91,51 +96,6 @@ const OrdersList = ({
     }
   };
 
-  const handleDialogChange = (open: boolean) => {
-    setCancelDialogOpen(open);
-    if (!open) setOrderToCancel(null);
-  };
-
-  if (orders.length === 0) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-center py-16"
-      >
-        <Package className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-        <p className="text-gray-500 dark:text-gray-400 text-lg">
-          No orders in this category
-        </p>
-      </motion.div>
-    );
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors = {
-      pending:
-        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-900",
-      confirmed:
-        "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-900",
-      preparing:
-        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-900",
-      out_for_delivery:
-        "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-900",
-      delivered:
-        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-900",
-      completed:
-        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-900",
-      cancelled:
-        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-900",
-      failed:
-        "bg-gray-100 text-gray-800 dark:bg-gray-700/30 dark:text-gray-400 border-gray-200 dark:border-gray-700",
-    };
-    return (
-      colors[status as keyof typeof colors] ||
-      "bg-gray-100 text-gray-800 dark:bg-gray-700/30 dark:text-gray-400"
-    );
-  };
-
   const handleLeaveFeedback = (order: IBookedOrderFetched) => {
     setOrderToFeedback(order);
     setShowFeedbackModal(true);
@@ -143,15 +103,20 @@ const OrdersList = ({
 
   const handleFeedbackSubmit = async (rating: number, comment: string) => {
     if (!orderToFeedback) return;
-    await dispatch(
-      updateBookedOrderAsync({
-        orderId: orderToFeedback.$id,
-        orderData: {
-          feedbackRating: rating,
-          feedbackComment: comment,
-        },
-      })
-    );
+    try {
+      await dispatch(
+        updateBookedOrderAsync({
+          orderId: orderToFeedback.$id,
+          orderData: {
+            feedbackRating: rating,
+            feedbackComment: comment,
+          },
+        })
+      );
+      toast.success("Thank you for your feedback!");
+    } catch (err) {
+      toast.error("Failed to submit feedback");
+    }
     setShowFeedbackModal(false);
     setOrderToFeedback(null);
   };
@@ -200,6 +165,44 @@ const OrdersList = ({
     (order) => order.status === "delivered"
   ).length;
 
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      pending:
+        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border-yellow-200 dark:border-yellow-900",
+      confirmed:
+        "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-900",
+      preparing:
+        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 border-orange-200 dark:border-orange-900",
+      out_for_delivery:
+        "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-900",
+      delivered:
+        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-900",
+      completed:
+        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-900",
+      cancelled:
+        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-900",
+    };
+    return (
+      colors[status] ||
+      "bg-gray-100 text-gray-800 dark:bg-gray-700/30 dark:text-gray-400"
+    );
+  };
+
+  if (orders.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center py-16"
+      >
+        <Package className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+        <p className="text-gray-500 dark:text-gray-400 text-lg">
+          No orders in this category
+        </p>
+      </motion.div>
+    );
+  }
+
   return (
     <TooltipProvider>
       <>
@@ -233,6 +236,7 @@ const OrdersList = ({
             )}
           </div>
         )}
+
         <div className="grid gap-6">
           <AnimatePresence>
             {orders.map((order, idx) => {
@@ -241,13 +245,22 @@ const OrdersList = ({
               );
               const isCash = order.paymentMethod === "cash";
               const canCancel = ["pending", "confirmed"].includes(order.status);
-              const canReorder = ["completed", "cancelled", "failed"].includes(
-                order.status
-              );
-              const isDelivered = order.status === "delivered";
+              const canReorder = [
+                "delivered",
+                "completed",
+                "cancelled",
+              ].includes(order.status);
               const showPayButton =
                 !order.paid &&
                 !["delivered", "completed", "cancelled"].includes(order.status);
+
+              // Calculate breakdown
+              const itemsTotal = order.total
+                ? order.total - (order.deliveryFee || 0) - SERVICE_CHARGE
+                : 0;
+              const amountToPayNow = isCash
+                ? itemsTotal + SERVICE_CHARGE
+                : order.total || 0;
 
               return (
                 <motion.div
@@ -263,7 +276,8 @@ const OrdersList = ({
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex-1">
                           <CardTitle className="text-lg font-bold text-orange-600 dark:text-orange-400 mb-1">
-                            Order: {order.riderCode?.toUpperCase()}
+                            Order #
+                            {order.riderCode?.toUpperCase() || order.orderId}
                           </CardTitle>
                           <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                             <Clock className="w-3.5 h-3.5" />
@@ -274,11 +288,17 @@ const OrdersList = ({
                           <Badge
                             className={`${getStatusColor(
                               order.status
-                            )} border font-semibold px-3 py-1 whitespace-nowrap`}
+                            )} border font-semibold px-3 py-1`}
                           >
                             {order.status.replace(/_/g, " ").toUpperCase()}
                           </Badge>
-                          {isDelivered && (
+                          {order.paid && (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-900">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              PAID
+                            </Badge>
+                          )}
+                          {order.status === "delivered" && (
                             <Checkbox
                               checked={selectedOrders.includes(order.$id)}
                               onCheckedChange={() =>
@@ -290,94 +310,115 @@ const OrdersList = ({
                       </div>
                     </CardHeader>
 
-                    <CardContent className="pt-4 space-y-4">
-                      <div className="grid gap-3">
-                        <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
-                          <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <MapPin className="w-5 h-5 text-orange-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900 dark:text-white text-sm mb-1">
-                              {branch ? branch.name : "-"}
-                            </p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400">
-                              {branch ? branch.address : ""}
-                            </p>
-                          </div>
+                    <CardContent className="pt-4 space-y-5">
+                      {/* Branch Info */}
+                      <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
+                        <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <MapPin className="w-5 h-5 text-orange-500" />
                         </div>
-
-                        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
-                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                            Total Amount
-                          </span>
-                          <span className="text-lg font-bold text-gray-900 dark:text-white">
-                            ₦{order.total?.toLocaleString()}
-                          </span>
-                        </div>
-
-                        {isCash && (
-                          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
-                            <div className="flex items-center gap-3">
-                              <Truck className="w-5 h-5 text-orange-500" />
-                              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                Delivery Fee
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                ₦{order.deliveryFee?.toLocaleString() ?? 0}
-                              </span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400 block">
-                                Paid on delivery
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
-                          <div className="flex items-center gap-2">
-                            <CreditCardIcon className="w-4 h-4 text-orange-500" />
-                            <span className="text-sm font-medium text-gray-600 dark:text-gray-400 capitalize">
-                              {order.paymentMethod.replace(/_/g, " ")}
-                            </span>
-                          </div>
-                          <Badge
-                            className={
-                              order.paid
-                                ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
-                                : "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
-                            }
-                          >
-                            {order.paid ? "Paid" : "Unpaid"}
-                          </Badge>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 dark:text-white text-sm mb-1">
+                            {branch?.name || "Unknown Branch"}
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            {branch?.address || ""}
+                          </p>
                         </div>
                       </div>
 
+                      {/* Price Breakdown */}
+                      <div className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 rounded-xl p-4 border border-orange-100 dark:border-orange-900/40">
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">
+                              Items Total
+                            </span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              ₦{itemsTotal.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">
+                              Delivery Fee
+                            </span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              ₦{(order.deliveryFee || 0).toLocaleString()}
+                              {isCash && (
+                                <span className="text-xs ml-1 text-gray-500">
+                                  (on delivery)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">
+                              Service Charge
+                            </span>
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              ₦{SERVICE_CHARGE.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="border-t border-orange-200 dark:border-orange-800 pt-2 mt-2">
+                            <div className="flex justify-between font-bold text-lg">
+                              <span>Total</span>
+                              <span className="text-orange-600 dark:text-orange-400">
+                                ₦{(order.total || 0).toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Payment Method */}
+                      <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <CreditCardIcon className="w-4 h-4 text-orange-500" />
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400 capitalize">
+                            {order.paymentMethod.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        <Badge
+                          className={
+                            order.paid
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                              : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                          }
+                        >
+                          {order.paid ? "PAID" : "UNPAID"}
+                        </Badge>
+                      </div>
+
+                      {/* Action Buttons */}
                       <div className="flex flex-wrap gap-2 pt-2">
-                        {order.status !== "delivered" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 min-w-[120px] rounded-xl border-2 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 font-semibold"
-                          >
-                            <Link
-                              href={`/myorders/${order.orderId}`}
-                              className="w-full h-full flex items-center justify-center"
+                        {order.status !== "delivered" &&
+                          order.status !== "completed" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-w-[120px] rounded-xl border-2 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 font-semibold"
                             >
-                              Track Order
-                            </Link>
-                          </Button>
-                        )}
-                        {order.status === "delivered" && (
-                          <Button
-                            onClick={() => handleLeaveFeedback(order)}
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 min-w-[120px] rounded-xl border-2 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 font-semibold"
-                          >
-                            Leave Feedback
-                          </Button>
-                        )}
+                              <Link
+                                href={`/myorders/${order.orderId}`}
+                                className="w-full flex items-center justify-center"
+                              >
+                                <Truck className="w-4 h-4 mr-2" />
+                                Track Order
+                              </Link>
+                            </Button>
+                          )}
+
+                        {order.status === "delivered" &&
+                          !order.feedbackRating && (
+                            <Button
+                              onClick={() => handleLeaveFeedback(order)}
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-w-[120px] rounded-xl border-2 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 font-semibold"
+                            >
+                              Leave Feedback
+                            </Button>
+                          )}
+
                         {showPayButton && (
                           <Button
                             variant="default"
@@ -394,49 +435,47 @@ const OrdersList = ({
                             ) : (
                               <>
                                 <CreditCardIcon className="w-4 h-4 mr-2" />
-                                Pay Now
-                                {order.paymentMethod === "cash" && (
-                                  <span className="ml-2 text-xs opacity-90">
-                                    (Items only)
+                                Pay ₦{amountToPayNow.toLocaleString()}
+                                {isCash && (
+                                  <span className="ml-1 text-xs">
+                                    (Items + Service)
                                   </span>
                                 )}
                               </>
                             )}
                           </Button>
                         )}
+
                         {canCancel && !order.paid && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleCancelClick(order)}
-                                className="flex-1 min-w-[120px] rounded-xl bg-red-500 hover:bg-red-600 font-semibold"
-                              >
-                                <XCircle className="w-4 h-4 mr-2" />
-                                Cancel
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Cancel this order</p>
-                            </TooltipContent>
-                          </Tooltip>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleCancelClick(order)}
+                            className="flex-1 min-w-[120px] rounded-xl font-semibold"
+                          >
+                            <XCircle className="w-4 h-4 mr-2" />
+                            Cancel
+                          </Button>
                         )}
+
                         {canCancel && order.paid && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Badge
-                                variant="secondary"
-                                className="px-3 py-1 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                              >
-                                Cannot Cancel (Paid)
-                              </Badge>
+                              <div className="flex-1">
+                                <Badge
+                                  variant="secondary"
+                                  className="w-full py-2 justify-center cursor-not-allowed opacity-70"
+                                >
+                                  Cannot Cancel (Paid)
+                                </Badge>
+                              </div>
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>Paid orders cannot be cancelled</p>
                             </TooltipContent>
                           </Tooltip>
                         )}
+
                         {canReorder && (
                           <Button
                             variant="secondary"
@@ -457,7 +496,7 @@ const OrdersList = ({
           </AnimatePresence>
         </div>
 
-        {/* Feedback Modal - Moved outside the loop */}
+        {/* Feedback Modal */}
         <OrderFeedbackModal
           customerPhone={orderToFeedback?.phone || ""}
           isOpen={showFeedbackModal}
@@ -469,8 +508,8 @@ const OrdersList = ({
           riderCode={orderToFeedback?.riderCode}
         />
 
-        {/* Cancel Order Dialog */}
-        <Dialog open={cancelDialogOpen} onOpenChange={handleDialogChange}>
+        {/* Cancel Dialog */}
+        <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
           <DialogContent className="dark:bg-gray-800 rounded-2xl max-w-md">
             <DialogHeader className="space-y-3">
               <div className="w-16 h-16 mx-auto bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
@@ -487,8 +526,8 @@ const OrdersList = ({
                     <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
                     <p className="text-xs font-medium text-orange-700 dark:text-orange-300 text-left">
                       The restaurant may have already started preparing your
-                      food. Cancelling now may not always be possible or may
-                      incur a fee.
+                      food. Cancelling now may not be possible or may incur a
+                      fee.
                     </p>
                   </div>
                 </div>
@@ -496,12 +535,12 @@ const OrdersList = ({
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Are you sure you want to cancel order{" "}
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  #{orderToCancel?.orderId}
+                  #{orderToCancel?.riderCode?.toUpperCase()}
                 </span>
                 ? This action cannot be undone.
               </p>
             </DialogDescription>
-            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-2 mt-4">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
               <DialogClose asChild>
                 <Button
                   variant="outline"
@@ -529,7 +568,7 @@ const OrdersList = ({
           </DialogContent>
         </Dialog>
 
-        {/* Delete Selected Orders Dialog */}
+        {/* Delete Selected Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <DialogContent className="dark:bg-gray-800 rounded-2xl max-w-md">
             <DialogHeader className="space-y-3">
@@ -540,13 +579,13 @@ const OrdersList = ({
                 Delete Selected Orders?
               </DialogTitle>
             </DialogHeader>
-            <DialogDescription className="text-center space-y-3">
+            <DialogDescription className="text-center">
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Are you sure you want to delete {selectedOrders.length} selected
-                orders? This action cannot be undone.
+                delivered orders? This action cannot be undone.
               </p>
             </DialogDescription>
-            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-2 mt-4">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
               <DialogClose asChild>
                 <Button
                   variant="outline"

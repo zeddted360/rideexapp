@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +27,8 @@ import { motion } from "framer-motion";
 import OrdersList from "./OrdersList";
 import { usePayment } from "@/context/paymentContext";
 
+const SERVICE_CHARGE = 200; // Must match CheckoutClient & OrderConfirmation
+
 const ORDER_STATUS_TABS: {
   key: OrderStatus | "completed" | "all";
   label: string;
@@ -42,16 +45,16 @@ const ORDER_STATUS_TABS: {
 ];
 
 const MyOrders = () => {
-  const { userId, isAuthenticated } = useAuth();
+  const { userId, isAuthenticated, user } = useAuth();
   const dispatch = useDispatch<AppDispatch>();
   const { orders, loading, error } = useSelector(
     (state: RootState) => state.bookedOrders
   );
   const { payWithPaystack, paying } = usePayment();
+
   const [activeTab, setActiveTab] = useState<OrderStatus | "completed" | "all">(
     "all"
   );
-  const { user } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated && userId) {
@@ -68,16 +71,12 @@ const MyOrders = () => {
           dispatch(fetchBookedOrdersByUserId(userId));
         }
       });
-      return () => {
-        unsubscribe();
-      };
+      return () => unsubscribe();
     }
   }, [dispatch, isAuthenticated, userId]);
 
   const getFilteredOrders = (status: OrderStatus | "completed" | "all") => {
-    if (status === "all") {
-      return orders;
-    }
+    if (status === "all") return orders;
     if (status === "completed") {
       return orders.filter(
         (order) => order.status === "delivered" && order.paid
@@ -88,14 +87,7 @@ const MyOrders = () => {
 
   const handleCancelOrder = async (orderId: string) => {
     try {
-      const order = orders.find((o) => o.$id === orderId);
-      if (!order) {
-        toast.error("Order not found");
-        return;
-      }
-
       await dispatch(cancelBookedOrder(orderId)).unwrap();
-
       toast.success("Order cancelled successfully!");
     } catch (error) {
       toast.error("Failed to cancel order");
@@ -103,20 +95,31 @@ const MyOrders = () => {
     }
   };
 
+  // FIXED: Correct payment amount with service charge logic
   const handlePayNow = (order: IBookedOrderFetched) => {
-    const safeTotal = order.total ?? 0;
-    const safeDeliveryFee = order.deliveryFee ?? 0;
+    if (!order.total || order.deliveryFee === undefined) {
+      toast.error("Order amount not available");
+      return;
+    }
+
     const isCash = order.paymentMethod === "cash";
-    const amountToPay = isCash ? safeTotal : safeTotal + safeDeliveryFee;
+
+    // Reverse-calculate items total
+    const itemsTotal = order.total - order.deliveryFee - SERVICE_CHARGE;
+
+    // Amount to pay online now
+    const amountToPayOnline = isCash
+      ? itemsTotal + SERVICE_CHARGE // Cash: items + service charge
+      : order.total; // Card: full total (includes delivery + service)
 
     payWithPaystack({
       email: user?.email || "user@example.com",
-      amount: amountToPay,
+      amount: amountToPayOnline,
       reference: order.orderId || order.$id,
       orderId: order.$id,
       onSuccess: () => {
         toast.success("Payment successful!");
-        dispatch(fetchBookedOrdersByUserId(userId!)); // Refresh orders
+        dispatch(fetchBookedOrdersByUserId(userId!));
       },
       onClose: () => {},
     });
@@ -126,13 +129,13 @@ const MyOrders = () => {
     toast.success("Reorder functionality coming soon!");
   };
 
+  // Auth guard
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full"
         >
           <Card className="rounded-2xl shadow-xl border-0 bg-white dark:bg-gray-800">
             <CardContent className="flex flex-col items-center justify-center py-16">
@@ -147,7 +150,7 @@ const MyOrders = () => {
               </p>
               <Button
                 asChild
-                className="w-full h-12 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl font-semibold"
+                className="w-full h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl font-semibold"
               >
                 <Link href="/login">Log In</Link>
               </Button>
@@ -162,20 +165,20 @@ const MyOrders = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 flex items-center justify-center p-4">
         <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           className="text-center space-y-4"
         >
-          <div className="relative w-20 h-20 mx-auto">
+          <div className="w-20 h-20 mx-auto">
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              className="w-20 h-20 rounded-full border-4 border-orange-200 dark:border-orange-800 border-t-orange-500"
+              className="w-full h-full rounded-full border-4 border-orange-200 dark:border-orange-800 border-t-orange-500"
             />
           </div>
-          <div className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+          <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
             Loading your orders...
-          </div>
+          </p>
         </motion.div>
       </div>
     );
@@ -187,7 +190,6 @@ const MyOrders = () => {
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full"
         >
           <Card className="rounded-2xl shadow-xl border-0 bg-white dark:bg-gray-800">
             <CardContent className="flex flex-col items-center justify-center py-16">
@@ -202,7 +204,7 @@ const MyOrders = () => {
               </p>
               <Button
                 onClick={() => dispatch(fetchBookedOrdersByUserId(userId!))}
-                className="w-full h-12 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl font-semibold"
+                className="w-full h-12 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl font-semibold"
               >
                 Try Again
               </Button>
@@ -235,14 +237,13 @@ const MyOrders = () => {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1 }}
           >
             <Card className="rounded-2xl shadow-xl border-0 bg-white dark:bg-gray-800">
               <CardContent className="flex flex-col items-center justify-center py-20">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                  transition={{ type: "spring", stiffness: 200 }}
                   className="w-24 h-24 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mb-6"
                 >
                   <Package className="w-12 h-12 text-orange-500" />
@@ -256,7 +257,7 @@ const MyOrders = () => {
                 </p>
                 <Button
                   asChild
-                  className="h-12 px-6 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl font-semibold shadow-lg"
+                  className="h-12 px-6 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl font-semibold shadow-lg"
                 >
                   <Link href="/menu">Browse Menu</Link>
                 </Button>
@@ -268,7 +269,6 @@ const MyOrders = () => {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
               className="mb-6"
             >
               <div className="flex items-center gap-2 mb-4">
@@ -292,9 +292,9 @@ const MyOrders = () => {
                       key={tab.key}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`flex items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                      className={`flex items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                         activeTab === tab.key
-                          ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-200 dark:shadow-orange-900/50"
+                          ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg"
                           : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 border border-gray-200 dark:border-gray-700"
                       }`}
                       onClick={() => setActiveTab(tab.key)}

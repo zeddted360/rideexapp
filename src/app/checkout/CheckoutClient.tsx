@@ -115,7 +115,9 @@ export default function CheckoutClient() {
   const { googleMapsApiKey } = validateEnv();
 
   const effectiveDeliveryFee = paymentMethod === "cash" ? 0 : deliveryFee;
-  const totalAmount = subtotal + effectiveDeliveryFee;
+  
+  // Add service charge (always applied, even for cash)
+  const totalAmount = subtotal + effectiveDeliveryFee + SERVICE_CHARGE;
 
   // Memoized branch data
   const selectedBranchData = useMemo(
@@ -254,45 +256,6 @@ export default function CheckoutClient() {
     // Removed unnecessary setRestaurantAddresses({}) to avoid extra re-render on initial mount
   }, [orders]);
 
-  // Calculate delivery fee
-  // useEffect(() => {
-  //   const calculateFee = async () => {
-  //     if (!debouncedAddress.trim() || !selectedBranchData || !orders.length) {
-  //       setDeliveryFee(333);
-  //       setDeliveryDistance("");
-  //       setDeliveryDuration("");
-  //       return;
-  //     }
-
-  //     setIsCalculatingFee(true);
-  //     try {
-  //       const result = await calculateDeliveryFee(
-  //         debouncedAddress,
-  //         selectedBranchData,
-  //         restaurantAddresses
-  //       );
-  //       setDeliveryFee(result.fee);
-  //       setDeliveryDistance(result.distance);
-  //       setDeliveryDuration(result.duration);
-  //     } catch (error) {
-  //       console.error("Fee calculation error:", error);
-  //       handleError("Failed to calculate delivery fee. Using default fee.");
-  //       setDeliveryFee(1000);
-  //       setDeliveryDistance("");
-  //       setDeliveryDuration("");
-  //     } finally {
-  //       setIsCalculatingFee(false);
-  //     }
-  //   };
-
-  //   calculateFee();
-  // }, [
-  //   debouncedAddress,
-  //   selectedBranchData,
-  //   restaurantAddresses,
-  //   orders.length,
-  //   handleError,
-  // ]);
 
   // Calculate delivery fee + show service charge
   useEffect(() => {
@@ -357,7 +320,6 @@ export default function CheckoutClient() {
 
   const { user } = useAuth();
   const userId = user?.userId;
-  const userEmail = user?.email;
 
   useEffect(() => {
     if (user?.phoneNumber) {
@@ -424,8 +386,9 @@ export default function CheckoutClient() {
       setManualMode(false);
       setGooglePlaceSelected(false);
       setSelectedPlace(null);
-    } catch {
+    } catch(err:any) {
       handleError("Failed to save address.");
+      console.error("Save address error:", err);
     }
   };
 
@@ -593,7 +556,10 @@ export default function CheckoutClient() {
         label,
         deliveryTime: formatDeliveryTime(calculateDeliveryTime()),
         createdAt: new Date().toISOString(),
-        total: paymentMethod === "cash" ? subtotal : subtotal + deliveryFee,
+        total:
+          paymentMethod === "cash"
+            ? subtotal + SERVICE_CHARGE
+            : subtotal + deliveryFee + SERVICE_CHARGE,
         status: "pending" as OrderStatus,
         phone: phoneNumber,
         customerId: userId,
@@ -774,6 +740,7 @@ export default function CheckoutClient() {
 
             <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
               <PlaceOrderButton
+                SERVICE_CHARGE={SERVICE_CHARGE}
                 subtotal={subtotal}
                 deliveryFee={effectiveDeliveryFee}
                 address={address}

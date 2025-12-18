@@ -35,6 +35,8 @@ import Loading from "./Loading";
 import CancelDialog from "./CancelDialog";
 
 export default function OrderConfirmation() {
+  const SERVICE_CHARGE = 200; // Must match CheckoutClient
+
   const dispatch = useDispatch<AppDispatch>();
   const router = useRouter();
 
@@ -79,6 +81,18 @@ export default function OrderConfirmation() {
 
   const isCash = latestOrder?.paymentMethod === "cash";
 
+  // Accurate breakdown
+  const itemsTotal =
+    latestOrder && latestOrder.total && latestOrder.deliveryFee !== undefined
+      ? latestOrder.total - latestOrder.deliveryFee - SERVICE_CHARGE
+      : 0;
+
+  const amountToPayOnline = isCash
+    ? itemsTotal + SERVICE_CHARGE // Cash: pay items + service charge online
+    : latestOrder?.total || 0; // Card: pay full total (includes everything)
+
+  const amountToPayOnDelivery = isCash ? latestOrder?.deliveryFee || 0 : 0;
+
   // Copy code
   const handleCopyCode = async () => {
     if (riderCode) {
@@ -93,17 +107,13 @@ export default function OrderConfirmation() {
     }
   };
 
-  // Pay now (supports cash: pay items only)
+  // Pay now with correct amount
   const handlePayNow = () => {
     if (!latestOrder) return;
 
-    const safeTotal = latestOrder.total ?? 0;
-    const safeDeliveryFee = latestOrder.deliveryFee ?? 0;
-    const amountToPay = isCash ? safeTotal : safeTotal + safeDeliveryFee;
-
     payWithPaystack({
       email: user?.email || "user@example.com",
-      amount: amountToPay,
+      amount: amountToPayOnline,
       reference: latestOrder.orderId || latestOrder.$id,
       orderId: latestOrder.$id,
       onSuccess: () => router.push(`/myorders/${latestOrder.orderId}`),
@@ -167,10 +177,6 @@ export default function OrderConfirmation() {
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} />;
   if (!latestOrder || !branch) return <NoLatestOrder />;
-
-  const safeTotal = latestOrder.total ?? 0;
-  const safeDeliveryFee = latestOrder.deliveryFee ?? 0;
-  const displayAmount = isCash ? safeTotal : safeTotal + safeDeliveryFee;
 
   /* --------------------------- Main UI --------------------------- */
   return (
@@ -346,7 +352,7 @@ export default function OrderConfirmation() {
             </motion.div>
 
             {/* Delivery Fee Info (Only for Cash) */}
-            {isCash && (
+            {isCash && amountToPayOnDelivery > 0 && (
               <motion.div
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -361,10 +367,10 @@ export default function OrderConfirmation() {
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold text-gray-900 dark:text-white">
-                    ₦{safeDeliveryFee.toLocaleString()}
+                    ₦{amountToPayOnDelivery.toLocaleString()}
                   </span>
                   <span className="text-xs text-gray-500 dark:text-gray-400 block">
-                    Paid on delivery
+                    Pay to rider on delivery
                   </span>
                 </div>
               </motion.div>
@@ -386,9 +392,25 @@ export default function OrderConfirmation() {
                         Payment Required
                       </p>
                       <p className="text-xs text-amber-700 dark:text-amber-300">
-                        {isCash
-                          ? `Pay ₦${displayAmount.toLocaleString()} for items now. Delivery fee on arrival.`
-                          : "Complete payment to confirm your order"}
+                        {isCash ? (
+                          <>
+                            Pay{" "}
+                            <strong>
+                              ₦{amountToPayOnline.toLocaleString()}
+                            </strong>{" "}
+                            now (items + service charge). Pay{" "}
+                            <strong>
+                              ₦{amountToPayOnDelivery.toLocaleString()}
+                            </strong>{" "}
+                            delivery fee to rider on arrival.
+                          </>
+                        ) : (
+                          <>
+                            Complete payment of ₦
+                            {amountToPayOnline.toLocaleString()} to confirm your
+                            order.
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -403,7 +425,7 @@ export default function OrderConfirmation() {
               transition={{ delay: 0.8 }}
               className="space-y-3 pt-2"
             >
-              {/* Pay Now Button - Always show if not paid */}
+              {/* Pay Now Button - Only if not paid */}
               {!latestOrder.paid && (
                 <Button
                   onClick={handlePayNow}
@@ -418,10 +440,10 @@ export default function OrderConfirmation() {
                   ) : (
                     <>
                       <CreditCard className="w-5 h-5 mr-2" />
-                      Pay ₦{displayAmount.toLocaleString()} Now
+                      Pay ₦{amountToPayOnline.toLocaleString()} Now
                       {isCash && (
                         <span className="ml-2 text-xs opacity-90">
-                          (Items only)
+                          (Items + Service Charge)
                         </span>
                       )}
                     </>
@@ -437,7 +459,7 @@ export default function OrderConfirmation() {
                 >
                   <Truck className="w-4 h-4 mr-2" />
                   {latestOrder.status === "delivered"
-                    ? "Leave a Feedback"
+                    ? "Leave Feedback"
                     : "Track Order"}
                 </Button>
 

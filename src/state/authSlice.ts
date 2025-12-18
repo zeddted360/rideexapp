@@ -251,6 +251,8 @@ export const getCurrentUserAsync = createAsyncThunk<
         userCollectionId,
         user.$id
       );
+
+      
       isAdmin = userDoc.isAdmin ?? false;
       role = isAdmin ? "admin" : userDoc.isVendor ? "vendor" :"user";
       phoneNumber = userDoc.phone
