@@ -1,10 +1,7 @@
 "use client";
-import {
-  Heart,
-  ShoppingBag,
-  ThumbsUp,
-} from "lucide-react";
-import React, { useEffect, useState } from "react";
+
+import { Heart, ShoppingBag, ThumbsUp } from "lucide-react";
+import React, { useEffect, useState, useMemo } from "react";
 import Image from "next/image";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/state/store";
@@ -28,9 +25,11 @@ const PopularItem = ({ toggleFavorite, favorites }: IPopularItemProps) => {
   const { popularItems, loading, error } = useSelector(
     (state: RootState) => state.popularItem
   );
+
   const [restaurantNames, setRestaurantNames] = useState<Map<string, string>>(
     new Map()
   );
+  
   const { setIsOpen, setItem } = useShowCart();
   const { user } = useAuth();
   const router = useRouter();
@@ -50,7 +49,7 @@ const PopularItem = ({ toggleFavorite, favorites }: IPopularItemProps) => {
     }
   }, [dispatch, loading]);
 
-  // Fetch restaurant names when featured items change
+  // Fetch restaurant names when popular items change
   useEffect(() => {
     if (popularItems.length > 0) {
       const restaurantIds = [
@@ -66,13 +65,21 @@ const PopularItem = ({ toggleFavorite, favorites }: IPopularItemProps) => {
     }
   }, [popularItems]);
 
-  // Filter and sort approved items by rating descending
-  const approvedItems = React.useMemo(() => {
-    return popularItems
-      .filter((item) => item.isApproved === true)
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  }, [popularItems]);
-  // In PopularItem, replace the loading return:
+  // Filter approved items
+  const approvedItems = popularItems.filter((item) => item.isApproved === true);
+
+  // Shuffle items randomly on every page load
+  const shuffledItems = useMemo(() => {
+    const shuffled = [...approvedItems];
+    // Fisher-Yates shuffle algorithm
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }, [approvedItems]); // Re-shuffle only when approved items change
+
+  // Loading state
   if (loading === "pending") {
     return (
       <section className="py-12 bg-white dark:bg-gray-900">
@@ -86,7 +93,7 @@ const PopularItem = ({ toggleFavorite, favorites }: IPopularItemProps) => {
         </div>
       </section>
     );
-  };
+  }
 
   if (error) {
     return (
@@ -106,11 +113,12 @@ const PopularItem = ({ toggleFavorite, favorites }: IPopularItemProps) => {
             </h2>
           </div>
 
-          {approvedItems.length > 0 ? (
+          {shuffledItems.length > 0 ? (
             <div className="space-y-6">
-              {approvedItems.map((item: IPopularItemFetched) => {
+              {shuffledItems.map((item: IPopularItemFetched) => {
                 // Calculate percentage: (rating / 5) * 100
                 const ratingPercentage = ((item.rating || 0) / 5) * 100;
+
                 return (
                   <div
                     key={item.$id}
@@ -147,7 +155,7 @@ const PopularItem = ({ toggleFavorite, favorites }: IPopularItemProps) => {
                       </div>
                     </div>
 
-                    {/* Other contents on the right */}
+                    {/* Content on the right */}
                     <div className="flex-1 p-3 sm:p-4 flex flex-col justify-between">
                       <div className="space-y-1 sm:space-y-2">
                         <h3 className="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg line-clamp-1">

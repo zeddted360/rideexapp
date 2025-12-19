@@ -1,6 +1,7 @@
 "use client";
+
 import { ThumbsUp, ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Image from "next/image";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/state/store";
@@ -23,7 +24,7 @@ const FeaturedItem = ({ toggleFavorite, favorites }: IFeaturedItemProps) => {
   const [restaurantNames, setRestaurantNames] = useState<Map<string, string>>(
     new Map()
   );
-  const [isInitialLoading, setIsInitialLoading] = useState(true); 
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const itemsPerPage = 8;
   const dispatch = useDispatch<AppDispatch>();
   const { featuredItems, loading, error } = useSelector(
@@ -70,16 +71,27 @@ const FeaturedItem = ({ toggleFavorite, favorites }: IFeaturedItemProps) => {
     (item) => item.isApproved === true
   );
 
-  // Calculate the items to display based on the current page
+  // Shuffle items randomly on every load (using useMemo for efficiency)
+  const shuffledItems = useMemo(() => {
+    const shuffled = [...approvedItems];
+    // Fisher-Yates shuffle algorithm
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }, [approvedItems]); // Re-shuffle only when approvedItems change
+
+  // Pagination on shuffled items
   const startIndex = currentPage * itemsPerPage;
-  const displayedItems = approvedItems.slice(
+  const displayedItems = shuffledItems.slice(
     startIndex,
     startIndex + itemsPerPage
   );
 
   // Navigation handlers
   const handleNext = () => {
-    if (startIndex + itemsPerPage < approvedItems.length) {
+    if (startIndex + itemsPerPage < shuffledItems.length) {
       setCurrentPage(currentPage + 1);
     }
   };
@@ -104,7 +116,6 @@ const FeaturedItem = ({ toggleFavorite, favorites }: IFeaturedItemProps) => {
             </p>
           </div>
           <div className="relative">
-            {/* Navigation buttons skeleton - optional, or hide for simplicity */}
             <FeaturedItemSkeleton count={8} />
           </div>
         </div>
@@ -151,9 +162,9 @@ const FeaturedItem = ({ toggleFavorite, favorites }: IFeaturedItemProps) => {
             {/* Next Button */}
             <button
               onClick={handleNext}
-              disabled={startIndex + itemsPerPage >= approvedItems.length}
+              disabled={startIndex + itemsPerPage >= shuffledItems.length}
               className={`absolute right-0 top-1/2 -translate-y-1/2 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-2 rounded-full shadow-md transition-colors duration-200 z-10 ${
-                startIndex + itemsPerPage >= approvedItems.length
+                startIndex + itemsPerPage >= shuffledItems.length
                   ? "opacity-50 cursor-not-allowed"
                   : "hover:bg-white dark:hover:bg-gray-700"
               }`}
@@ -162,9 +173,10 @@ const FeaturedItem = ({ toggleFavorite, favorites }: IFeaturedItemProps) => {
             </button>
 
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              {
-                displayedItems.length > 0
-                  ? displayedItems.map((item: IFeaturedItemFetched) => {
+              {displayedItems.length > 0
+                ? displayedItems
+                    .slice(0, 6)
+                    .map((item: IFeaturedItemFetched) => {
                       // Calculate percentage: (rating / 5) * 100
                       const ratingPercentage = ((item.rating || 0) / 5) * 100;
                       return (
@@ -244,8 +256,7 @@ const FeaturedItem = ({ toggleFavorite, favorites }: IFeaturedItemProps) => {
                         </div>
                       );
                     })
-                  : null // Hide the "no items" message entirely as per your request
-              }
+                : null}
             </div>
           </div>
         </div>

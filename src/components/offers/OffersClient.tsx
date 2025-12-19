@@ -224,32 +224,33 @@ function ViewToggleSection({ viewMode, setViewMode,showList }: {showList:boolean
       animate={{ opacity: 1, y: 0 }}
       className="flex items-center justify-between mb-6"
     >
-      {
-        showList &&
-      <div  className="flex items-center justify-between gap-4 w-full">
-        <h2 className="text-xl sm:text-2xl font-bold text-orange-600">RideEx CloudMart</h2>
-        <div className="flex gap-x-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setViewMode('grid')}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
-          >
-            <Grid className="w-4 h-4" />
-            <span className="hidden sm:inline">Grid</span>
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setViewMode('list')}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
-          >
-            <List className="w-4 h-4" />
-            <span className="hidden sm:inline">List</span>
-          </motion.button>
+      {showList && (
+        <div className="flex items-center justify-between gap-4 w-full">
+          <h2 className="text-xl sm:text-2xl font-bold text-orange-600">
+            RideEx MiniMart
+          </h2>
+          <div className="flex gap-x-3">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setViewMode("grid")}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+            >
+              <Grid className="w-4 h-4" />
+              <span className="hidden sm:inline">Grid</span>
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setViewMode("list")}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+            >
+              <List className="w-4 h-4" />
+              <span className="hidden sm:inline">List</span>
+            </motion.button>
+          </div>
         </div>
-      </div>
-}
+      )}
       <div></div> {/* Placeholder for layout balance */}
     </motion.div>
   );
