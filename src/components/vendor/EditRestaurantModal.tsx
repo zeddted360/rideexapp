@@ -1,4 +1,3 @@
-// EditRestaurantModal.tsx
 "use client";
 import { Dispatch, FC, SetStateAction, useEffect, useState } from "react";
 import { useForm, SubmitHandler, UseFormReturn } from "react-hook-form";
@@ -9,7 +8,6 @@ import {
   Upload,
   Clock,
   MapPin,
-  Star,
   Tag,
   Image as ImageIcon,
 } from "lucide-react";
@@ -27,6 +25,7 @@ import { Button } from "../ui/button";
 import { fileUrl, validateEnv } from "@/utils/appwrite";
 import { RestaurantFormData, restaurantSchema } from "@/utils/schema";
 import { IRestaurantFetched, IScheduleDay } from "../../../types/types";
+import { useAuth } from "@/context/authContext";
 
 interface EditRestaurantModalProps {
   restaurant: IRestaurantFetched | null;
@@ -38,7 +37,7 @@ interface EditRestaurantModalProps {
     form: UseFormReturn<RestaurantFormData>
   ) => Promise<void>;
   isUpdating: boolean;
-  setIsUpdating: Dispatch<SetStateAction<boolean>>;
+  setIsUpdating:Dispatch<SetStateAction<boolean>>
 }
 
 const daysOfWeek = [
@@ -70,6 +69,9 @@ const EditRestaurantModal: FC<EditRestaurantModalProps> = ({
   isUpdating,
 }) => {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const { user } = useAuth();
+  const isVendor = user?.role === "vendor";
+  const isAdmin = user?.role === "admin";
 
   if (!restaurant) return null;
 
@@ -257,8 +259,7 @@ const EditRestaurantModal: FC<EditRestaurantModalProps> = ({
                       className="cursor-pointer file:cursor-pointer file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:bg-orange-100 dark:file:bg-orange-900/30 file:text-orange-700 dark:file:text-orange-400 file:font-semibold hover:file:bg-orange-200 dark:hover:file:bg-orange-900/40 transition-all border-gray-300 dark:border-gray-600"
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      PNG, JPG or WEBP (max. 5MB). Leave empty to keep current
-                      logo.
+                      PNG, JPG or WEBP (max. 5MB). Leave empty to keep current logo.
                     </p>
                     {formState.errors.logo && (
                       <p className="text-red-500 text-sm font-medium">
@@ -332,65 +333,59 @@ const EditRestaurantModal: FC<EditRestaurantModalProps> = ({
                   )}
                 </div>
 
-                <div>
-                  <Label
-                    htmlFor="rating"
-                    className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-2"
-                  >
-                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                    nobyl Rating
-                  </Label>
-                  <Input
-                    id="rating"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="5"
-                    {...register("rating", { valueAsNumber: true })}
-                    className="h-11 border-gray-300 dark:border-gray-600 focus:border-orange-500 focus:ring-orange-500"
-                    placeholder="0.0"
-                  />
-                  {formState.errors.rating && (
-                    <p className="text-red-500 text-sm mt-2 font-medium">
-                      {formState.errors.rating.message}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+                {/* Rating - Only visible to Admin */}
+                {isAdmin && (
+                  <div>
+                    <Label
+                      htmlFor="rating"
+                      className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block"
+                    >
+                      Rating (Admin Only)
+                    </Label>
+                    <Input
+                      id="rating"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="5"
+                      {...register("rating", { valueAsNumber: true })}
+                      className="h-11 border-gray-300 dark:border-gray-600 focus:border-orange-500 focus:ring-orange-500"
+                      placeholder="0.0"
+                    />
+                    {formState.errors.rating && (
+                      <p className="text-red-500 text-sm mt-2 font-medium">
+                        {formState.errors.rating.message}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-            {/* ---------- Delivery Details (no distance) ---------- */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                  <MapPin className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                </div>
-                <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                  Delivery Details
-                </h4>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
-                <Label
-                  htmlFor="deliveryTime"
-                  className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block"
-                >
-                  Delivery Time
-                </Label>
-                <Input
-                  id="deliveryTime"
-                  {...register("deliveryTime")}
-                  className="h-11 border-gray-300 dark:border-gray-600 focus:border-orange-500 focus:ring-orange-500"
-                  placeholder="e.g., 30-45 mins"
-                />
-                {formState.errors.deliveryTime && (
-                  <p className="text-red-500 text-sm mt-2 font-medium">
-                    {formState.errors.deliveryTime.message}
-                  </p>
+                {/* Delivery Time - Only visible to Admin */}
+                {isAdmin && (
+                  <div>
+                    <Label
+                      htmlFor="deliveryTime"
+                      className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block"
+                    >
+                      Delivery Time (Admin Only)
+                    </Label>
+                    <Input
+                      id="deliveryTime"
+                      {...register("deliveryTime")}
+                      className="h-11 border-gray-300 dark:border-gray-600 focus:border-orange-500 focus:ring-orange-500"
+                      placeholder="e.g., 30-45 mins"
+                    />
+                    {formState.errors.deliveryTime && (
+                      <p className="text-red-500 text-sm mt-2 font-medium">
+                        {formState.errors.deliveryTime.message}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* ---------- Addresses (Main + 2 Branches) ---------- */}
+            {/* ---------- Branches ---------- */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
@@ -481,10 +476,7 @@ const EditRestaurantModal: FC<EditRestaurantModalProps> = ({
                             />
                             {formState.errors.schedule?.[idx]?.openTime && (
                               <p className="text-red-500 text-xs mt-1.5 font-medium">
-                                {
-                                  formState.errors.schedule[idx]?.openTime
-                                    ?.message
-                                }
+                                {formState.errors.schedule[idx]?.openTime?.message}
                               </p>
                             )}
                           </div>
@@ -507,10 +499,7 @@ const EditRestaurantModal: FC<EditRestaurantModalProps> = ({
                             />
                             {formState.errors.schedule?.[idx]?.closeTime && (
                               <p className="text-red-500 text-xs mt-1.5 font-medium">
-                                {
-                                  formState.errors.schedule[idx]?.closeTime
-                                    ?.message
-                                }
+                                {formState.errors.schedule[idx]?.closeTime?.message}
                               </p>
                             )}
                           </div>

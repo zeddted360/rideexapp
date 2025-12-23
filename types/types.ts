@@ -55,7 +55,6 @@ export interface IScheduleDay {
   isClosed: boolean;
 }
 
-// types/types.ts (updated snippet)
 export interface IRestaurant {
   name: string;
   logo: FileList | string;
@@ -250,7 +249,7 @@ export interface ISearchResult {
   price?: string;
   description?: string;
   restaurantName?: string;
-  restaurantId?: string; // Added for better cart handling
+  restaurantId?: string;
   category?: string;
   rating?: number;
   deliveryTime?: string;
@@ -282,8 +281,8 @@ export interface IRiders {
   gender: string;
   dateOfBirth: string;
   nin: string;
-  bvn?: string; // optional
-  driversLicensePicture?: string; // file ID, optional
+  bvn?: string;
+  driversLicensePicture?: string;
   vehicleType: string;
   previousWorkPlace: string;
   workDuration: string;
@@ -293,29 +292,29 @@ export interface IRiders {
   guarantor2Name: string;
   guarantor2Phone: string;
   guarantor2Relationship: string;
-  referralCode?: string; // optional
+  referralCode?: string;
   refferedBy?: string;
   status: string;
 }
 export interface IRidersFetched extends IRiders, Models.Document {}
 
 export interface IDiscount {
-  title: string; // e.g., "20% Off on Biryani"
-  description: string; // e.g., "Get 20% off on all Biryani orders this weekend"
-  discountType: "percentage" | "fixed"; // Type of discount
-  discountValue: number; // e.g., 20 for 20%, or 500 for ₦500 off
-  originalPrice?: number; // If item-specific
-  discountedPrice?: number; // Calculated or set
-  validFrom: string; // ISO date string, e.g., "2025-10-04T00:00:00Z"
-  validTo: string; // ISO date string
-  minOrderValue?: number; // Minimum cart value to apply (optional)
-  maxUses?: number; // Total uses limit (optional)
-  code?: string; // Promo code if applicable
-  appliesTo: "new" | "deal" | "exclusive" | "limited-time"; // Scope
-  targetId?: string; // Item ID, Category, or Restaurant ID if targeted
-  image?: string | FileList; // Promo banner image ID from storage
-  isActive: boolean; // For admin toggling
-  usageCount?: number; // Track uses (for maxUses enforcement)
+  title: string;
+  description: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  originalPrice?: number;
+  discountedPrice?: number;
+  validFrom: string;
+  validTo: string;
+  minOrderValue?: number;
+  maxUses?: number;
+  code?: string;
+  appliesTo: "new" | "deal" | "exclusive" | "limited-time";
+  targetId?: string;
+  image?: string | FileList;
+  isActive: boolean;
+  usageCount?: number;
   extras?: string[];
   restaurantId?: string;
   isApproved?: boolean;
@@ -351,4 +350,12 @@ export interface Branch {
   lat: number;
   lng: number;
   address: string;
+}
+
+export interface StructuredItem {
+  itemId: string;
+  quantity: number;
+  extrasIds: string[];
+  priceAtOrder: number;
+  specialInstructions?: string;
 }

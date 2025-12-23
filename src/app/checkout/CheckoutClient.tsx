@@ -104,6 +104,8 @@ export default function CheckoutClient() {
   const router = useRouter();
 
   const orders = useSelector((state: RootState) => state.orders.orders) || [];
+
+
   const subtotal = useMemo(
     () => orders.reduce((sum, item) => sum + (item.totalPrice || 0), 0),
     [orders]
@@ -115,7 +117,7 @@ export default function CheckoutClient() {
   const { googleMapsApiKey } = validateEnv();
 
   const effectiveDeliveryFee = paymentMethod === "cash" ? 0 : deliveryFee;
-  
+
   // Add service charge (always applied, even for cash)
   const totalAmount = subtotal + effectiveDeliveryFee + SERVICE_CHARGE;
 
@@ -256,7 +258,6 @@ export default function CheckoutClient() {
     // Removed unnecessary setRestaurantAddresses({}) to avoid extra re-render on initial mount
   }, [orders]);
 
-
   // Calculate delivery fee + show service charge
   useEffect(() => {
     const calculateFee = async () => {
@@ -386,7 +387,7 @@ export default function CheckoutClient() {
       setManualMode(false);
       setGooglePlaceSelected(false);
       setSelectedPlace(null);
-    } catch(err:any) {
+    } catch (err: any) {
       handleError("Failed to save address.");
       console.error("Save address error:", err);
     }
@@ -525,6 +526,7 @@ export default function CheckoutClient() {
     setIsPlacingOrder(true);
     try {
       const orderId = ID.unique();
+
       const structuredItems = orders.map((cartItem: ICartItemFetched) =>
         JSON.stringify({
           itemId: cartItem.itemId,
@@ -544,6 +546,7 @@ export default function CheckoutClient() {
               })
               .filter((id): id is string => id !== null) || [],
           priceAtOrder: cartItem.price,
+          specialInstructions: cartItem.specialInstructions || "",
         })
       );
 

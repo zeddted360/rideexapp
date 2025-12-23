@@ -38,6 +38,7 @@ interface EnvConfig {
   smartSmsSenderId: string;
   adminPhoneNumber: string;
   packsCollectionId: string;
+  adminPromotionCodesCollectionId: string;
 }
 
 // Validate environment variables
@@ -89,6 +90,8 @@ export function validateEnv(): EnvConfig {
     smartSmsSenderId: process.env.NEXT_PUBLIC_SENDER_ID,
     adminPhoneNumber: process.env.NEXT_PUBLIC_ADMIN_PHONE_NUMBER,
     packsCollectionId: process.env.NEXT_PUBLIC_PACK_COLLECTION_ID,
+    adminPromotionCodesCollectionId:
+      process.env.NEXT_PUBLIC_APPWRITE_ADMIN_PROMOTION_COLLECTION!,
   };
 
   // Check for undefined environment variables
@@ -140,6 +143,8 @@ export function validateEnv(): EnvConfig {
     smartSmsSenderId: requiredEnvVars.smartSmsSenderId!,
     adminPhoneNumber: requiredEnvVars.adminPhoneNumber!,
     packsCollectionId: requiredEnvVars.packsCollectionId!,
+    adminPromotionCodesCollectionId:
+      requiredEnvVars.adminPromotionCodesCollectionId!,
   };
 }
 

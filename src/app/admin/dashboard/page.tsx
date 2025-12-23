@@ -46,7 +46,7 @@ import {
   Package,
   Shield,
 } from "lucide-react";
-import { Query } from "appwrite";
+import { ID, Query } from "appwrite";
 import OrdersTab from "@/components/OrdersTab";
 import VendorsTab from "@/components/VendorsTab";
 import ContentModerationTab from "@/components/ContentModerationTab";
@@ -54,6 +54,8 @@ import RidersTab from "@/components/RidersTab";
 import RestaurantsTab from "@/components/RestaurantsTab";
 import UsersTab from "@/components/UsersTab";
 import { useAuth } from "@/context/authContext";
+import AccessRestriction from "./AccessRestriction";
+import AdminPromo2FaAuth from "./AdminPromo2FaAuth";
 
 const ORDER_STATUSES = [
   "pending",
@@ -95,7 +97,7 @@ export default function AdminDashboard() {
     loading: usersLoading,
     error: usersError,
   } = useSelector((state: RootState) => state.users);
-  const { user:loggedInUser } = useAuth();
+  const { user: loggedInUser } = useAuth();
   const [activeTab, setActiveTab] = useState<
     "orders" | "vendors" | "content" | "riders" | "restaurants" | "users"
   >("orders");
@@ -131,6 +133,28 @@ export default function AdminDashboard() {
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [userCurrentPage, setUserCurrentPage] = useState(1);
   const usersPerPage = 10;
+
+  // make admin state
+
+  const [promotionState, setPromotionState] = useState<{
+    open: boolean;
+    targetUserId: string;
+    targetUserName: string;
+    targetUserEmail: string;
+    step: "send" | "verify";
+    code: string;
+    loading: boolean;
+    error: string;
+  }>({
+    open: false,
+    targetUserId: "",
+    targetUserName: "",
+    targetUserEmail: "",
+    step: "send",
+    code: "",
+    loading: false,
+    error: "",
+  });
 
   // Authentication check
   useEffect(() => {
@@ -343,7 +367,7 @@ export default function AdminDashboard() {
   };
 
   // Vendor delete handler
- const handleVendorDelete = async (vendorId: string) => {
+  const handleVendorDelete = async (vendorId: string) => {
     try {
       const vendor = vendors.find((v) => v.$id === vendorId);
       if (!vendor) {
@@ -418,27 +442,151 @@ export default function AdminDashboard() {
       toast.error(error.message || "Failed to delete user");
     }
   };
-
   // User admin toggle handler
+  // Generate 6-digit code
+  const generateCode = () =>
+    Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Start promotion flow
   const handleAdminToggle = async (userId: string, toAdmin: boolean) => {
+    if (!toAdmin) {
+      // Demoting – direct
+      try {
+        await dispatch(
+          updateUserAdminAsync({ userId, isAdmin: false })
+        ).unwrap();
+        toast.success("Admin privileges removed");
+      } catch (err: any) {
+        toast.error(err.message || "Failed");
+      }
+      return;
+    }
+    // Promoting – open 2FA modal
+    const targetUser = users.find((u) => u.$id === userId);
+    if (!targetUser) return toast.error("User not found");
+    if (targetUser.isAdmin) return toast.error("Already admin");
+
+    setPromotionState({
+      open: true,
+      targetUserId: userId,
+      targetUserName: targetUser.fullName || targetUser.email || "User",
+      targetUserEmail: targetUser.email || "",
+      step: "send",
+      code: "",
+      loading: false,
+      error: "",
+    });
+  };
+
+  // Send code (generate + store + email)
+  const sendPromotionCode = async () => {
+    if (!promotionState.targetUserEmail) {
+      return toast.error("User has no email");
+      
+    }
+
+    setPromotionState((s) => ({ ...s, loading: true, error: "" }));
+
+    const code = generateCode();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 min
+
     try {
-      const user = users.find((u) => u.$id === userId);
+      const { databaseId, adminPromotionCodesCollectionId } = validateEnv();
 
-      if (!user) {
-        toast.error("User not found");
-      }
-      if (loggedInUser?.userId === user?.$id && !toAdmin) {
-        toast.error("Cannot demote yourself");
-        return;
-      }
+      // Store in Appwrite
+      await databases.createDocument(
+        databaseId,
+        adminPromotionCodesCollectionId,
+        ID.unique(),
+        {
+          userId: promotionState.targetUserId,
+          code,
+          expiresAt,
+          used: false,
+        }
+      );
 
+      // Send email via server route
+      const res = await fetch("/api/admin/send-promotion-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: promotionState.targetUserEmail,
+          fullName: promotionState.targetUserName,
+          code,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Email failed");
+
+      toast.success("Verification code sent!");
+      setPromotionState((s) => ({ ...s, step: "verify", loading: false }));
+    } catch (err: any) {
+      setPromotionState((s) => ({ ...s, error: err.message, loading: false }));
+      toast.error("Failed to send code");
+    }
+  };
+
+  // Verify code and promote
+  const verifyAndPromote = async () => {
+    if (promotionState.code.length !== 6) {
+      return setPromotionState((s) => ({ ...s, error: "Enter 6 digits" }));
+    }
+
+    setPromotionState((s) => ({ ...s, loading: true, error: "" }));
+
+    try {
+      const { databaseId, adminPromotionCodesCollectionId } = validateEnv();
+
+      const res = await databases.listDocuments(
+        databaseId,
+        adminPromotionCodesCollectionId,
+        [
+          Query.equal("userId", promotionState.targetUserId),
+          Query.equal("code", promotionState.code),
+          Query.equal("used", false),
+          Query.greaterThan("expiresAt", Date.now()),
+        ]
+      );
+
+      if (res.documents.length === 0)
+        throw new Error("Invalid or expired code");
+
+      const doc = res.documents[0];
+
+      // Mark used
+      await databases.updateDocument(
+        databaseId,
+        adminPromotionCodesCollectionId,
+        doc.$id,
+        { used: true }
+      );
+
+      // Promote
       await dispatch(
-        updateUserAdminAsync({ userId, isAdmin: toAdmin })
+        updateUserAdminAsync({
+          userId: promotionState.targetUserId,
+          isAdmin: true,
+        })
       ).unwrap();
 
-    } catch (error: any) {
-      console.error("Error updating user admin status:", error);
-      toast.error(error.message || "Failed to update user admin status");
+      toast.success(`${promotionState.targetUserName} is now Admin!`);
+      setPromotionState({
+        open: false,
+        targetUserId: "",
+        targetUserName: "",
+        targetUserEmail: "",
+        step: "send",
+        code: "",
+        loading: false,
+        error: "",
+      });
+    } catch (err: any) {
+      setPromotionState((s) => ({
+        ...s,
+        error: err.message || "Invalid code",
+        loading: false,
+      }));
     }
   };
 
@@ -524,35 +672,7 @@ export default function AdminDashboard() {
     userCurrentPage * usersPerPage
   );
 
-  if (loggedInUser?.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 max-w-md text-center border border-gray-200 dark:border-gray-700">
-          <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-8 h-8 text-red-600 dark:text-red-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            Access Restricted
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            This page is only accessible to Admins
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (loggedInUser?.role !== "admin") return <AccessRestriction/>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-4 sm:py-8 px-3 sm:px-6 lg:px-8">
@@ -725,6 +845,15 @@ export default function AdminDashboard() {
           />
         )}
       </div>
+      {/* Admin Promotion 2FA Modal */}
+      {promotionState.open && (
+        <AdminPromo2FaAuth
+          promotionState={promotionState}
+          sendPromotionCode={sendPromotionCode}
+          setPromotionState={setPromotionState}
+          verifyAndPromote={verifyAndPromote}
+        />
+      )}
     </div>
   );
 }

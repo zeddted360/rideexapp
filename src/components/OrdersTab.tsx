@@ -1,5 +1,6 @@
 "use client";
-import React, { useEffect, useState } from "react";
+
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Search,
   Filter,
@@ -19,6 +20,7 @@ import {
   Truck,
   Calendar,
   Trash2,
+  MessageSquare,
 } from "lucide-react";
 import {
   IBookedOrderFetched,
@@ -38,7 +40,7 @@ import { RootState, AppDispatch } from "@/state/store";
 import { listAsyncFeaturedItems } from "@/state/featuredSlice";
 import { listAsyncMenusItem } from "@/state/menuSlice";
 import { listAsyncPopularItems } from "@/state/popularSlice";
-import { listAsyncDiscounts } from "@/state/discountSlice"; // Add this import
+import { listAsyncDiscounts } from "@/state/discountSlice";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +56,10 @@ import toast from "react-hot-toast";
 import { cancelBookedOrder } from "@/state/bookedOrdersSlice";
 import { Query } from "appwrite";
 import { listAsyncPromoOfferItems } from "@/state/offerSlice";
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TYPES & UTILITIES
+// ──────────────────────────────────────────────────────────────────────────────
 
 interface OrdersTabProps {
   orders: IBookedOrderFetched[];
@@ -85,6 +91,7 @@ interface StructuredItem {
   quantity: number;
   extrasIds: string[];
   priceAtOrder: number;
+  specialInstructions?: string;
 }
 
 interface ParsedExtra {
@@ -107,10 +114,87 @@ function cleanAddress(address: string): string {
   return cleaned;
 }
 
+const parseExtraId = (extraIdStr: string): ParsedExtra => {
+  const [extraId, quantityStr] = extraIdStr.split("_");
+  return {
+    extraId,
+    quantity: parseInt(quantityStr, 10) || 1,
+  };
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// BULK RESTAURANT FETCHING HOOK
+// ──────────────────────────────────────────────────────────────────────────────
+
+function useRestaurantsByIds(ids: string[]) {
+  const [restaurants, setRestaurants] = useState<
+    Record<string, IRestaurantFetched>
+  >({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (ids.length === 0) {
+      setRestaurants({});
+      setLoading(false);
+      return;
+    }
+
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+
+    const fetchRestaurants = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const { databaseId, restaurantsCollectionId } = validateEnv();
+
+        const chunkSize = 100;
+        const chunks = [];
+        for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+          chunks.push(uniqueIds.slice(i, i + chunkSize));
+        }
+
+        const allResults: IRestaurantFetched[] = [];
+
+        for (const chunk of chunks) {
+          const response = await databases.listDocuments(
+            databaseId,
+            restaurantsCollectionId,
+            [Query.equal("$id", chunk)]
+          );
+          allResults.push(...(response.documents as IRestaurantFetched[]));
+        }
+
+        const map: Record<string, IRestaurantFetched> = {};
+        allResults.forEach((doc) => {
+          map[doc.$id] = doc;
+        });
+
+        setRestaurants(map);
+      } catch (err: any) {
+        console.error("Failed to load restaurants:", err);
+        setError("Failed to load restaurant information");
+        toast.error("Could not load some restaurant details");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRestaurants();
+  }, [ids.join(",")]);
+
+  return { restaurants, loading, error };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ──────────────────────────────────────────────────────────────────────────────
+
 export default function OrdersTab({
   orders,
-  loading,
-  error,
+  loading: ordersLoading,
+  error: ordersError,
   searchTerm,
   setSearchTerm,
   statusFilter,
@@ -132,12 +216,8 @@ export default function OrdersTab({
   const popularItems = useSelector(
     (state: RootState) => state.popularItem.popularItems
   );
-  const {discounts} = useSelector(
-    (state: RootState) => state.discounts
-  );
-  const {offersItem} = useSelector(
-    (state: RootState) => state.promoOffer
-  ); // Assuming promoSlice with promoOffers
+  const { discounts } = useSelector((state: RootState) => state.discounts);
+  const { offersItem } = useSelector((state: RootState) => state.promoOffer);
 
   const [customerNames, setCustomerNames] = useState<{ [key: string]: string }>(
     {}
@@ -154,9 +234,6 @@ export default function OrdersTab({
   const [structuredItems, setStructuredItems] = useState<StructuredItem[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [fetchedRestos, setFetchedRestos] = useState<{
-    [id: string]: IRestaurantFetched;
-  }>({});
   const [branchDistances, setBranchDistances] = useState<{
     [restoId: string]: BranchDistance[];
   }>({});
@@ -166,9 +243,66 @@ export default function OrdersTab({
     dispatch(listAsyncFeaturedItems());
     dispatch(listAsyncMenusItem());
     dispatch(listAsyncPopularItems());
-    dispatch(listAsyncDiscounts()); 
+    dispatch(listAsyncDiscounts());
     dispatch(listAsyncPromoOfferItems());
   }, [dispatch]);
+
+  // ────────────────────────────────────────────────────────────────
+  // IMPROVED CUSTOMER NAME FETCHING (FIXED VERSION)
+  // ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (orders.length === 0 || fetchingNames) return;
+
+    const uniqueCustomerIds = [
+      ...new Set(
+        orders
+          .map((order) => order.customerId)
+          .filter((id) => id && !customerNames[id]) // only missing ones
+      ),
+    ];
+
+    if (uniqueCustomerIds.length === 0) return;
+
+    setFetchingNames(true);
+
+    const fetchMissingCustomerNames = async () => {
+      try {
+        const promises = uniqueCustomerIds.map(async (customerId) => {
+          try {
+            const response = (await databases.getDocument(
+              validateEnv().databaseId,
+              validateEnv().userCollectionId,
+              customerId
+            )) as IUserFectched;
+
+            return {
+              customerId,
+              name: response.fullName || "Unknown",
+            };
+          } catch (err) {
+            console.error(`Failed to fetch user ${customerId}:`, err);
+            return { customerId, name: "Unknown Customer" };
+          }
+        });
+
+        const results = await Promise.all(promises);
+
+        setCustomerNames((prev) => {
+          const updates = { ...prev };
+          results.forEach(({ customerId, name }) => {
+            updates[customerId] = name;
+          });
+          return updates;
+        });
+      } catch (err) {
+        console.error("Batch customer fetch failed:", err);
+      } finally {
+        setFetchingNames(false);
+      }
+    };
+
+    fetchMissingCustomerNames();
+  }, [orders, customerNames]); // Depend on both
 
   const findItemById = (id: string): ItemWithBucket => {
     let item:
@@ -178,64 +312,43 @@ export default function OrdersTab({
       | IDiscountFetched
       | IPromoOfferFetched
       | undefined = menuItems.find((item) => item.$id === id);
-    if (item) {
-      return { item, bucketId: validateEnv().menuBucketId };
-    }
+    if (item) return { item, bucketId: validateEnv().menuBucketId };
+
     item = featuredItems.find((item) => item.$id === id);
-    if (item) {
-      return { item, bucketId: validateEnv().featuredBucketId };
-    }
+    if (item) return { item, bucketId: validateEnv().featuredBucketId };
+
     item = popularItems.find((item) => item.$id === id);
-    if (item) {
-      return { item, bucketId: validateEnv().popularBucketId };
-    }
+    if (item) return { item, bucketId: validateEnv().popularBucketId };
+
     item = discounts.find((item) => item.$id === id);
-    if (item) {
-      return { item, bucketId: validateEnv().discountBucketId };
-    }
+    if (item) return { item, bucketId: validateEnv().discountBucketId };
+
     item = offersItem.find((item) => item.$id === id);
-    if (item) {
-      return { item, bucketId: validateEnv().promoOfferBucketId };
-    }
-    // Default return if no item is found
+    if (item) return { item, bucketId: validateEnv().promoOfferBucketId };
+
     return { item: null, bucketId: null };
   };
-  
-  const fetchCustomerName = async (customerId: string) => {
-    if (customerId && !customerNames[customerId]) {
-      try {
-        const response = (await databases.getDocument(
-          validateEnv().databaseId,
-          validateEnv().userCollectionId,
-          customerId
-        )) as IUserFectched;
 
-        setCustomerNames((prev) => ({
-          ...prev,
-          [customerId]: response.fullName as string,
-        }));
-      } catch (err) {
-        console.error(
-          err instanceof Error ? err.message : "Error fetching customer name"
-        );
-        setCustomerNames((prev) => ({
-          ...prev,
-          [customerId]: "Unknown Customer",
-        }));
-      }
-    }
-  };
+  const restaurantIdsForCurrentOrder = useMemo(() => {
+    if (!selectedOrder?.items) return [];
 
-  useEffect(() => {
-    if (orders.length > 0 && !fetchingNames) {
-      setFetchingNames(true);
-      const uniqueCustomerIds = [
-        ...new Set(orders.map((order) => order.customerId)),
-      ];
-      uniqueCustomerIds.forEach(fetchCustomerName);
-      setFetchingNames(false);
+    try {
+      const parsed = selectedOrder.items.map((str) =>
+        JSON.parse(str)
+      ) as StructuredItem[];
+      const ids = parsed
+        .map((item) => findItemById(item.itemId).item?.restaurantId)
+        .filter((id): id is string => !!id);
+      return [...new Set(ids)];
+    } catch {
+      return [];
     }
-  }, [orders]);
+  }, [selectedOrder]);
+
+  const { restaurants: restaurantDataMap, loading: restaurantsLoading } =
+    useRestaurantsByIds(restaurantIdsForCurrentOrder);
+
+  // ... rest of your useEffect for selectedOrder, extras, distances remains the same ...
 
   useEffect(() => {
     if (selectedOrder && selectedOrder.items) {
@@ -245,47 +358,41 @@ export default function OrdersTab({
         ) as StructuredItem[];
         setStructuredItems(parsedItems);
 
+        // Fetch extras
         setFetchingExtras(true);
         const extraIds = new Set<string>();
         parsedItems.forEach((structuredItem) => {
           structuredItem.extrasIds.forEach((extraIdStr: string) => {
             const [extraId] = extraIdStr.split("_");
-            if (extraId) {
-              extraIds.add(extraId);
-            }
+            if (extraId) extraIds.add(extraId);
           });
         });
 
         const extraIdsToFetch = Array.from(extraIds).filter(
           (id) => !fetchedExtras[id]
         );
-        if (extraIdsToFetch.length === 0) {
-          setFetchingExtras(false);
-        } else {
+
+        if (extraIdsToFetch.length > 0) {
           const fetchExtrasAndPacks = async () => {
             try {
               const { databaseId, extrasCollectionId, packsCollectionId } =
                 validateEnv();
 
-              // Fetch from extras collection
               const extrasResponse = await databases.listDocuments(
                 databaseId,
                 extrasCollectionId,
                 [Query.equal("$id", extraIdsToFetch)]
               );
-              const fetchedExtrasArr: IFetchedExtras[] =
+              const fetchedExtrasArr =
                 extrasResponse.documents as IFetchedExtras[];
 
-              // Fetch from packs collection
               const packsResponse = await databases.listDocuments(
                 databaseId,
                 packsCollectionId,
                 [Query.equal("$id", extraIdsToFetch)]
               );
-              const fetchedPacks: IPackFetched[] =
-                packsResponse.documents as IPackFetched[];
+              const fetchedPacks = packsResponse.documents as IPackFetched[];
 
-              // Combine them
               const newExtrasAndPacks: {
                 [key: string]: IFetchedExtras | IPackFetched;
               } = {};
@@ -295,43 +402,20 @@ export default function OrdersTab({
 
               setFetchedExtras((prev) => ({ ...prev, ...newExtrasAndPacks }));
             } catch (error) {
-              console.error("Failed to fetch extras and packs:", error);
+              console.error("Failed to fetch extras/packs:", error);
             } finally {
               setFetchingExtras(false);
             }
           };
 
           fetchExtrasAndPacks();
+        } else {
+          setFetchingExtras(false);
         }
 
-        // Fetch restaurants and distances
-        const fetchRestosAndDistances = async () => {
-          const restoIdsSet = new Set<string>();
-          parsedItems.forEach((struc) => {
-            const { item } = findItemById(struc.itemId);
-            if (item?.restaurantId) restoIdsSet.add(item.restaurantId);
-          });
-          const restoIds = Array.from(restoIdsSet);
-
-          if (restoIds.length === 0) return;
-
-          const { databaseId, restaurantsCollectionId } = validateEnv();
-          const restos: { [id: string]: IRestaurantFetched } = {};
-          for (const id of restoIds) {
-            try {
-              restos[id] = (await databases.getDocument(
-                databaseId,
-                restaurantsCollectionId,
-                id
-              )) as IRestaurantFetched;
-            } catch (err) {
-              console.error(`Failed to fetch restaurant ${id}:`, err);
-            }
-          }
-          setFetchedRestos(restos);
-
-          if (!selectedOrder.address || Object.keys(restos).length === 0)
-            return;
+        // Fetch branch distances
+        const fetchDistances = async () => {
+          if (!selectedOrder.address) return;
 
           setFetchingDistances(true);
           try {
@@ -341,16 +425,13 @@ export default function OrdersTab({
               [index: number]: { restoId: string; branchIndex: number };
             } = {};
 
-            Object.entries(restos).forEach(([restoId, resto]) => {
+            Object.entries(restaurantDataMap).forEach(([restoId, resto]) => {
               (resto.addresses || []).forEach(
-                (addr: string, branchIdx: number) => {
+                (addr: string, branchIndex: number) => {
                   const cleanAddr = cleanAddress(addr);
                   const currentIndex = allOrigins.length;
                   allOrigins.push(cleanAddr);
-                  restoBranchMap[currentIndex] = {
-                    restoId,
-                    branchIndex: branchIdx,
-                  };
+                  restoBranchMap[currentIndex] = { restoId, branchIndex };
                 }
               );
             });
@@ -384,7 +465,6 @@ export default function OrdersTab({
               }
             });
 
-            // Sort each restaurant's branches by distance
             Object.keys(distances).forEach((restoId) => {
               distances[restoId].sort(
                 (a, b) => a.distanceValue - b.distanceValue
@@ -399,14 +479,14 @@ export default function OrdersTab({
           }
         };
 
-        fetchRestosAndDistances();
+        fetchDistances();
       } catch (err) {
         console.error("Failed to parse structured items:", err);
         setStructuredItems([]);
         setFetchingExtras(false);
       }
     }
-  }, [selectedOrder]);
+  }, [selectedOrder, restaurantDataMap]);
 
   const handleCopy = async (text: string, field: string) => {
     try {
@@ -465,13 +545,75 @@ export default function OrdersTab({
   const deliveryAddress = selectedOrder?.address;
   const deliverContact = selectedOrder?.phone;
 
-  // Helper function to parse extraId_quantity strings
-  const parseExtraId = (extraIdStr: string): ParsedExtra => {
-    const [extraId, quantityStr] = extraIdStr.split("_");
-    return {
-      extraId,
-      quantity: parseInt(quantityStr, 10) || 1, // Default to 1 if parsing fails
-    };
+  const handleCopyClosestBranch = (restoId: string) => {
+    const branches = branchDistances[restoId] || [];
+    if (branches.length === 0) return;
+
+    const closest = branches[0];
+    const textToCopy = `${closest.address} (${closest.distanceText})`;
+    handleCopy(textToCopy, `Closest Branch ${restoId}`);
+  };
+
+  const handleCopyOrderItems = () => {
+    let summary = "Order Items Summary\n";
+    summary += "═══════════════════════════════\n\n";
+
+    // Add Rider Code at the top
+    if (selectedOrder?.riderCode) {
+      summary += `Rider Code: ${selectedOrder.riderCode}\n`;
+    } else {
+      summary += `Rider Code: Not available\n`;
+    }
+
+    // Optional: add order ID or other useful info
+    if (selectedOrder?.orderId) {
+      summary += `Order ID: ${selectedOrder.orderId}\n`;
+    }
+    summary += `Date: ${new Date(
+      selectedOrder?.createdAt || Date.now()
+    ).toLocaleString()}\n`;
+    summary += "═══════════════════════════════\n\n";
+
+    structuredItems.forEach((item, index) => {
+      const { item: menuItem } = findItemById(item.itemId);
+      const restaurantName =
+        restaurantDataMap[menuItem?.restaurantId || ""]?.name ||
+        "Unknown Restaurant";
+
+      summary += `Item ${index + 1}: ${menuItem?.name || "Unknown Item"}\n`;
+      summary += `Restaurant: ${restaurantName}\n`;
+      summary += `Quantity: ${item.quantity}\n`;
+      summary += `Price per item: ₦${item.priceAtOrder.toLocaleString()}\n`;
+
+      if (item.extrasIds.length > 0) {
+        summary += "Extras:\n";
+        item.extrasIds.forEach((extraStr) => {
+          const parsed = parseExtraId(extraStr);
+          const extra = fetchedExtras[parsed.extraId];
+          if (extra) {
+            const price = Number(extra.price) || 0; // fallback to 0 if conversion fails
+            const total = price * parsed.quantity;
+
+            summary += `  - ${extra.name} x${
+              parsed.quantity
+            } (₦${total.toLocaleString()}) \n`;
+          }
+        });
+      }
+
+      if (item.specialInstructions?.trim()) {
+        summary += `Special Instructions: ${item.specialInstructions.trim()}\n`;
+      }
+
+      summary += "───────────────────────────────\n\n";
+    });
+
+    // Optional: add grand total at the bottom
+    if (selectedOrder?.total) {
+      summary += `Grand Total: ₦${selectedOrder.total.toLocaleString()}\n`;
+    }
+
+    handleCopy(summary.trim(), "Order Items Summary");
   };
 
   return (
@@ -541,7 +683,7 @@ export default function OrdersTab({
       </div>
 
       {/* Orders Content */}
-      {loading ? (
+      {ordersLoading ? (
         <div className="space-y-4">
           {[...Array(5)].map((_, index) => (
             <div
@@ -554,13 +696,13 @@ export default function OrdersTab({
             </div>
           ))}
         </div>
-      ) : error ? (
+      ) : ordersError ? (
         <div className="flex flex-col items-center justify-center py-12 px-4">
           <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
             <X className="w-8 h-8 text-red-500" />
           </div>
           <p className="text-red-600 dark:text-red-400 font-semibold text-center">
-            {error}
+            {ordersError}
           </p>
         </div>
       ) : (
@@ -904,7 +1046,6 @@ export default function OrdersTab({
                 </h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Address */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">
                     Delivery Address
@@ -931,7 +1072,6 @@ export default function OrdersTab({
                   </div>
                 </div>
 
-                {/* Contact */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">
                     Contact Number
@@ -957,10 +1097,9 @@ export default function OrdersTab({
                   </div>
                 </div>
 
-                {/* Delivery Time */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">
-                    Delivery Time
+                    Schedule Delivery
                   </label>
                   <div className="flex items-center gap-2 p-3 bg-white dark:bg-gray-800 rounded-xl border border-blue-200 dark:border-blue-800">
                     <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
@@ -971,6 +1110,13 @@ export default function OrdersTab({
                 </div>
               </div>
             </div>
+
+            {/* Restaurant Loading Indicator */}
+            {restaurantsLoading && (
+              <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+                Loading restaurant information...
+              </div>
+            )}
 
             {/* Order Summary Card */}
             <div className="bg-gradient-to-br from-orange-50 to-pink-50 dark:from-orange-900/20 dark:to-pink-900/20 p-4 sm:p-5 rounded-2xl border-2 border-orange-200 dark:border-orange-800">
@@ -1010,6 +1156,16 @@ export default function OrdersTab({
                     ₦{deliveryFee.toLocaleString()}
                   </span>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Payment Method:
+                  </span>
+                  <span className="font-bold text-gray-900 dark:text-white">
+                    {selectedOrder?.paymentMethod === "cash"
+                      ? "pay on delivery"
+                      : selectedOrder?.paymentMethod || "N/A"}
+                  </span>
+                </div>
                 <div className="flex justify-between items-center col-span-2 pt-3 border-t-2 border-orange-300 dark:border-orange-700">
                   <span className="text-lg font-bold text-gray-900 dark:text-white">
                     Grand Total:
@@ -1021,7 +1177,7 @@ export default function OrdersTab({
               </div>
             </div>
 
-            {/* Order Items */}
+            {/* Order Items Section */}
             {fetchingExtras ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <Package className="w-12 h-12 animate-spin text-orange-500 mb-4" />
@@ -1031,10 +1187,20 @@ export default function OrdersTab({
               </div>
             ) : (
               <div className="space-y-4">
-                <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Package className="w-5 h-5 text-orange-500" />
-                  Order Items ({structuredItems.length})
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Package className="w-5 h-5 text-orange-500" />
+                    Order Items ({structuredItems.length})
+                  </h3>
+                  <button
+                    onClick={handleCopyOrderItems}
+                    className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                    title="Copy Order Items Summary"
+                  >
+                    <Copy className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </button>
+                </div>
+
                 {structuredItems.map((structuredItem, itemIndex) => {
                   const { item, bucketId } = findItemById(
                     structuredItem.itemId
@@ -1063,19 +1229,22 @@ export default function OrdersTab({
                     );
                   }
 
-                  // Parse extrasIds to extract extraId and quantity
+                  const restaurant = restaurantDataMap[item.restaurantId || ""];
+
+                  const restaurantName = restaurantsLoading
+                    ? "Loading..."
+                    : restaurant?.name || "Unknown Restaurant";
+
                   const parsedExtras =
                     structuredItem.extrasIds.map(parseExtraId);
-
                   const itemSubtotal =
                     structuredItem.priceAtOrder * structuredItem.quantity;
                   const extrasSubtotal = parsedExtras.reduce(
                     (sum, parsedExtra) => {
                       const extra = fetchedExtras[parsedExtra.extraId];
-                      if (extra) {
-                        return sum + +extra.price * parsedExtra.quantity;
-                      }
-                      return sum;
+                      return (
+                        sum + (extra ? +extra.price * parsedExtra.quantity : 0)
+                      );
                     },
                     0
                   );
@@ -1104,9 +1273,12 @@ export default function OrdersTab({
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-bold text-gray-900 dark:text-white text-base sm:text-lg mb-2">
+                            <h4 className="font-bold text-gray-900 dark:text-white text-base sm:text-lg mb-1">
                               {item.name || item.title}
                             </h4>
+                            <p className="text-sm text-orange-600 dark:text-orange-400 font-medium mb-2">
+                              {restaurantName}
+                            </p>
                             <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
                               {item.description || "No description available"}
                             </p>
@@ -1206,6 +1378,22 @@ export default function OrdersTab({
                         </div>
                       )}
 
+                      {/* Special Instructions */}
+                      {structuredItem.specialInstructions &&
+                        structuredItem.specialInstructions.trim() !== "" && (
+                          <div className="p-4 sm:p-5 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/10 dark:to-amber-900/10 border-t-2 border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center gap-2 mb-2">
+                              <MessageSquare className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                              <h6 className="text-sm font-semibold text-yellow-800 dark:text-yellow-300">
+                                Special Instructions
+                              </h6>
+                            </div>
+                            <p className="text-sm text-yellow-800 dark:text-yellow-300 whitespace-pre-wrap leading-relaxed">
+                              {structuredItem.specialInstructions}
+                            </p>
+                          </div>
+                        )}
+
                       {/* Line Total */}
                       <div className="p-3 sm:p-4 bg-gradient-to-r from-orange-500 to-pink-500 flex justify-between items-center">
                         <span className="text-sm font-bold text-white">
@@ -1234,44 +1422,59 @@ export default function OrdersTab({
                     Calculating distances...
                   </p>
                 </div>
-              ) : Object.keys(fetchedRestos).length === 0 ? (
+              ) : Object.keys(restaurantDataMap).length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 text-center py-4">
                   No restaurants found for this order
                 </p>
               ) : (
-                Object.entries(fetchedRestos).map(([restoId, resto]) => (
-                  <div
-                    key={restoId}
-                    className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"
-                  >
-                    <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
-                      {resto.name}
-                    </h4>
-                    {branchDistances[restoId]?.length > 0 ? (
-                      <select
-                        defaultValue={
-                          branchDistances[restoId][0]?.address || ""
-                        }
-                        className="w-full p-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-orange-500 dark:focus:border-orange-500 transition-all"
-                      >
-                        {branchDistances[restoId].map((branch, i) => (
-                          <option key={i} value={branch.address}>
-                            {branch.address} - {branch.distanceText} (
-                            {i === 0 ? "closest" : ""})
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        No branch distances available
-                      </p>
-                    )}
-                  </div>
-                ))
+                Object.entries(restaurantDataMap).map(([restoId, resto]) => {
+                  const branches = branchDistances[restoId] || [];
+                  const closest = branches[0];
+
+                  return (
+                    <div
+                      key={restoId}
+                      className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900 dark:text-white">
+                          {resto.name}
+                        </h4>
+                        {branches.length > 0 && (
+                          <button
+                            onClick={() => handleCopyClosestBranch(restoId)}
+                            className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                            title="Copy closest branch address"
+                          >
+                            <Copy className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          </button>
+                        )}
+                      </div>
+
+                      {branches.length > 0 ? (
+                        <select
+                          defaultValue={closest?.address || ""}
+                          className="w-full p-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-orange-500 dark:focus:border-orange-500 transition-all"
+                        >
+                          {branches.map((branch, i) => (
+                            <option key={i} value={branch.address}>
+                              {branch.address} - {branch.distanceText} (
+                              {i === 0 ? "closest" : ""})
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          No branch addresses available
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
 
-            {/* Grand Total Footer - Mobile Friendly Bottom Placement */}
+            {/* Grand Total Footer */}
             <div className="mt-6 pt-4 border-t-2 border-gray-200 dark:border-gray-700 bg-gradient-to-br from-orange-50 to-pink-50 dark:from-orange-900/20 dark:to-pink-900/20 p-4 rounded-2xl sticky bottom-0 z-10 sm:static sm:mt-0">
               <div className="flex justify-between items-center text-lg font-bold">
                 <span className="text-gray-900 dark:text-white">
