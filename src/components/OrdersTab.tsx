@@ -239,6 +239,7 @@ export default function OrdersTab({
   }>({});
   const [fetchingDistances, setFetchingDistances] = useState(false);
 
+
   useEffect(() => {
     dispatch(listAsyncFeaturedItems());
     dispatch(listAsyncMenusItem());
@@ -348,7 +349,6 @@ export default function OrdersTab({
   const { restaurants: restaurantDataMap, loading: restaurantsLoading } =
     useRestaurantsByIds(restaurantIdsForCurrentOrder);
 
-  // ... rest of your useEffect for selectedOrder, extras, distances remains the same ...
 
   useEffect(() => {
     if (selectedOrder && selectedOrder.items) {
@@ -591,7 +591,7 @@ export default function OrdersTab({
           const parsed = parseExtraId(extraStr);
           const extra = fetchedExtras[parsed.extraId];
           if (extra) {
-            const price = Number(extra.price) || 0; // fallback to 0 if conversion fails
+            const price = Number(extra.price) || 0; 
             const total = price * parsed.quantity;
 
             summary += `  - ${extra.name} x${
@@ -1103,7 +1103,15 @@ export default function OrdersTab({
                   </label>
                   <div className="flex items-center gap-2 p-3 bg-white dark:bg-gray-800 rounded-xl border border-blue-200 dark:border-blue-800">
                     <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                    <p className="flex-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    <p
+                      className={`flex-1 text-sm font-semibold px-3 py-1 rounded-full ${
+                        deliveryTime === "Now"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : deliveryTime === "Tomorrow"
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                      }`}
+                    >
                       {deliveryTime || "ASAP"}
                     </p>
                   </div>

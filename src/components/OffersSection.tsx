@@ -1,6 +1,6 @@
-// components/OffersSection.tsx
 "use client";
-import React, { useEffect } from "react";
+
+import React, { useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/state/store";
 import { motion } from "framer-motion";
@@ -22,26 +22,49 @@ const OffersSection: React.FC<OffersSectionProps> = () => {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
 
+  // Fetch offers on mount
   useEffect(() => {
     dispatch(listAsyncPromoOfferItems());
   }, [dispatch]);
 
+  // Randomly select 2 unique offers every time offers change (or on reload)
+  const displayedOffers = useMemo(() => {
+    if (offers.length === 0) return [];
+
+    // If 1 or 2 offers → just return them
+    if (offers.length <= 2) return [...offers];
+
+    // If 3+ offers → randomly pick 2 unique ones
+    const shuffled = [...offers];
+    // Fisher-Yates shuffle (full shuffle for fairness)
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Take first 2 after shuffle
+    return shuffled.slice(0, 2);
+  }, [offers]); // Re-run only when offers array changes
 
   const renderSkeletonCards = () => {
-    const skeletons = Array.from({ length: 3 }).map((_, index) => (
-      <motion.div
-        key={`skeleton-${index}`}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: index * 0.05 }}
-      >
-        <SkeletonOfferCard viewMode="grid" />
-      </motion.div>
-    ));
+    const skeletons = Array.from({ length: 2 }).map(
+      (
+        _,
+        index // Only 2 skeletons to match display
+      ) => (
+        <motion.div
+          key={`skeleton-${index}`}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.05 }}
+        >
+          <SkeletonOfferCard viewMode="grid" />
+        </motion.div>
+      )
+    );
+
     return (
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {skeletons}
-      </div>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">{skeletons}</div>
     );
   };
 
@@ -67,7 +90,7 @@ const OffersSection: React.FC<OffersSectionProps> = () => {
     );
   }
 
-  if (offers.length === 0) {
+  if (displayedOffers.length === 0) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -95,8 +118,9 @@ const OffersSection: React.FC<OffersSectionProps> = () => {
           View All
         </Button>
       </div>
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {offers.slice(0, 2).map((offer, index) => (
+
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        {displayedOffers.map((offer, index) => (
           <motion.div
             key={offer.$id}
             initial={{ opacity: 0, y: 20 }}
@@ -108,7 +132,7 @@ const OffersSection: React.FC<OffersSectionProps> = () => {
               viewMode="grid"
               onEdit={() => {}}
               onDetails={() => {}}
-              showActions={false} // Assuming not in /offers path
+              showActions={false}
             />
           </motion.div>
         ))}

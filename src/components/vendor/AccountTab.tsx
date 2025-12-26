@@ -1,4 +1,5 @@
 "use client";
+
 import React, {
   Dispatch,
   FC,
@@ -12,7 +13,7 @@ import {
   IScheduleDay,
   IRestaurant,
 } from "../../../types/types";
-import { Edit, Search, Clock, MapPin, Star, Pause } from "lucide-react"; // Removed Play icon
+import { Edit, Search, Clock, MapPin, Star, Pause } from "lucide-react";
 import EditRestaurantModal from "./EditRestaurantModal";
 import Image from "next/image";
 import { fileUrl, validateEnv } from "@/utils/appwrite";
@@ -31,9 +32,9 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"; // shadcn Tooltip for messages
-import { Alert, AlertDescription } from "@/components/ui/alert"; // shadcn Alert for paused state
-import { motion } from "framer-motion"; // For subtle animations (optional, install if needed)
+} from "@/components/ui/tooltip";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { motion } from "framer-motion";
 
 interface IAccountTabProps {
   searchCategory: string;
@@ -53,7 +54,7 @@ const AccountTab: FC<IAccountTabProps> = ({
   const [isUpdating, setIsUpdating] = useState(false);
   const [isPausedAlertOpen, setIsPausedAlertOpen] = useState<
     Map<string, boolean>
-  >(new Map()); // Track open alerts per restaurant
+  >(new Map());
   const dispatch = useDispatch<AppDispatch>();
 
   const handleEditRestaurant = (id: string) => {
@@ -66,7 +67,6 @@ const AccountTab: FC<IAccountTabProps> = ({
     setShowEditModal(true);
   };
 
-  // Handle form submission for updating restaurant (block if paused)
   const onSubmit = useCallback(
     async (
       data: RestaurantFormData,
@@ -95,7 +95,6 @@ const AccountTab: FC<IAccountTabProps> = ({
 
       setIsUpdating(true);
       try {
-        // Normalize schedule to ensure no undefined values
         const normalizedSchedule = data.schedule.map((d) => ({
           day: d.day,
           isClosed: d.isClosed,
@@ -103,7 +102,6 @@ const AccountTab: FC<IAccountTabProps> = ({
           closeTime: d.closeTime ?? null,
         })) as IScheduleDay[];
 
-        // Filter out empty addresses
         const processedAddresses = data.addresses.filter(
           (addr) => addr.trim() !== ""
         );
@@ -113,13 +111,12 @@ const AccountTab: FC<IAccountTabProps> = ({
           category: data.category,
           deliveryTime: data.deliveryTime,
           rating: data.rating,
-          vendorId: data.vendorId || restaurant.vendorId, // Preserve existing if not provided
+          vendorId: data.vendorId || restaurant.vendorId,
           logo: data.logo as string | FileList,
           schedule: normalizedSchedule,
           addresses: processedAddresses,
         };
 
-        // Update the restaurant
         await dispatch(
           updateAsyncRestaurant({
             id: restaurant.$id,
@@ -127,17 +124,14 @@ const AccountTab: FC<IAccountTabProps> = ({
           })
         ).unwrap();
 
-        // Refetch the restaurant data
         const updatedRestaurant = await dispatch(
           getAsyncRestaurantById(restaurant.$id)
         ).unwrap();
 
-        // Update filteredRestaurants to reflect changes
         setFilteredRestaurants((prev) =>
           prev.map((r) => (r.$id === restaurant.$id ? updatedRestaurant : r))
         );
 
-        // Update local restaurant state for the modal
         setRestaurant(updatedRestaurant);
         setShowEditModal(false);
         toast.success("Restaurant updated successfully!");
@@ -173,7 +167,6 @@ const AccountTab: FC<IAccountTabProps> = ({
     return schedule.find((s) => s.day === currentDay);
   };
 
-  // Toggle paused alert visibility
   const togglePausedAlert = (id: string) => {
     setIsPausedAlertOpen((prev) => {
       const newMap = new Map(prev);
@@ -184,10 +177,8 @@ const AccountTab: FC<IAccountTabProps> = ({
 
   return (
     <TooltipProvider>
-      {" "}
-      {/* Wrap for tooltips */}
       <div className="space-y-6">
-        {/* Search Section (unchanged) */}
+        {/* Search Section */}
         <div className="relative max-w-xl">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <Input
@@ -204,18 +195,18 @@ const AccountTab: FC<IAccountTabProps> = ({
           <div className="space-y-4">
             {filteredRestaurants.map((restaurant: IRestaurantFetched) => {
               const todaySchedule = getTodaySchedule(restaurant.schedule);
-              const isPaused = restaurant.isPaused || false; // Ensure boolean
+              const isPaused = restaurant.isPaused || false;
               const alertId = restaurant.$id;
               const isAlertOpen = isPausedAlertOpen.get(alertId) || false;
 
               return (
-                <motion.div // Animate on mount (modern touch)
+                <motion.div
                   key={restaurant.$id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className={`group bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border ${
                     isPaused
-                      ? "border-red-500 dark:border-red-800 shadow-red-200/50" // Caution styling
+                      ? "border-red-500 dark:border-red-800 shadow-red-200/50"
                       : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-lg"
                   } transition-all duration-300 hover:border-orange-200 dark:hover:border-orange-900`}
                   role={isPaused ? "alert" : "article"}
@@ -226,7 +217,7 @@ const AccountTab: FC<IAccountTabProps> = ({
                   }
                 >
                   <div className="flex flex-col sm:flex-row">
-                    {/* Image Section - Left Side (dim if paused) */}
+                    {/* Image Section */}
                     <div
                       className={`relative w-full sm:w-64 h-48 sm:h-auto flex-shrink-0 bg-gradient-to-br ${
                         isPaused
@@ -245,7 +236,6 @@ const AccountTab: FC<IAccountTabProps> = ({
                           isPaused ? "opacity-70" : ""
                         }`}
                       />
-                      {/* Rating Badge (hide or dim if paused) */}
                       {!isPaused && (
                         <div className="absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm shadow-lg">
                           <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
@@ -254,7 +244,6 @@ const AccountTab: FC<IAccountTabProps> = ({
                           </span>
                         </div>
                       )}
-                      {/* Paused Overlay Badge */}
                       {isPaused && (
                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                           <div className="bg-yellow-500 text-white px-4 py-2 rounded-full flex items-center gap-2 font-semibold text-sm shadow-lg">
@@ -265,18 +254,18 @@ const AccountTab: FC<IAccountTabProps> = ({
                       )}
                     </div>
 
-                    {/* Content Section - Right Side */}
+                    {/* Content Section */}
                     <div className="flex-1 p-6 relative">
-                      {/* Edit Button (disabled if paused) */}
+                      {/* Edit Button - ALWAYS VISIBLE */}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             onClick={() => handleEditRestaurant(restaurant.$id)}
                             disabled={isPaused}
-                            className={`absolute top-4 right-4 p-2 rounded-lg ${
+                            className={`absolute top-4 right-4 p-2 rounded-lg transition-all duration-200 ${
                               isPaused
                                 ? "bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-50"
-                                : "bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                : "bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-800/50 text-orange-600 dark:text-orange-300"
                             }`}
                             aria-label={
                               isPaused
@@ -284,22 +273,21 @@ const AccountTab: FC<IAccountTabProps> = ({
                                 : `Edit ${restaurant.name}`
                             }
                           >
-                            <Edit className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                            <Edit className="w-5 h-5" />
                           </button>
                         </TooltipTrigger>
                         {isPaused && (
                           <TooltipContent>
-                            <p>
-                              Restaurant Currently Restricted
-                            </p>
+                            <p>Restaurant is paused – cannot edit</p>
                           </TooltipContent>
                         )}
                       </Tooltip>
 
                       {/* Restaurant Info */}
-                      <div className="space-y-4">
-                        {/* Header */}
-                        <div className="pr-12">
+                      <div className="space-y-4 pr-16">
+                        {" "}
+                        {/* Added pr-16 to prevent overlap with button */}
+                        <div>
                           <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1.5 line-clamp-1">
                             {restaurant.name}
                           </h3>
@@ -309,8 +297,6 @@ const AccountTab: FC<IAccountTabProps> = ({
                             </span>
                           </div>
                         </div>
-
-                        {/* Paused Alert (collapsible) */}
                         {isPaused && (
                           <motion.div
                             initial={{ height: 0, opacity: 0 }}
@@ -339,8 +325,6 @@ const AccountTab: FC<IAccountTabProps> = ({
                             </Alert>
                           </motion.div>
                         )}
-
-                        {/* Quick Stats (dim if paused) */}
                         <div
                           className={`flex flex-wrap gap-4 pt-2 ${
                             isPaused ? "opacity-70" : ""
@@ -355,8 +339,6 @@ const AccountTab: FC<IAccountTabProps> = ({
                             </span>
                           </div>
                         </div>
-
-                        {/* Operating Hours (override if paused) */}
                         <div className="flex items-center gap-6 pt-3 border-t border-gray-200 dark:border-gray-700">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
@@ -405,7 +387,6 @@ const AccountTab: FC<IAccountTabProps> = ({
             })}
           </div>
         ) : (
-          // Empty State (unchanged)
           <div className="flex flex-col items-center justify-center py-20 px-4">
             <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center mb-5 shadow-inner">
               <Search className="w-12 h-12 text-orange-400 dark:text-orange-600" />
@@ -423,7 +404,6 @@ const AccountTab: FC<IAccountTabProps> = ({
           </div>
         )}
 
-        {/* Edit Modal (block if paused) */}
         {showEditModal && restaurant && !restaurant.isPaused && (
           <EditRestaurantModal
             restaurant={restaurant}

@@ -32,3 +32,28 @@ export function formatDeliveryTime(date: Date) {
     minute: "2-digit",
   });
 } 
+
+export const getDeliveryTimeLabel = (
+  deliveryDay: "today" | "tomorrow",
+  selectedTimeSlot: string,
+  timeSlots: any
+) => {
+  if (deliveryDay === "tomorrow") {
+    return "Tomorrow";
+  }
+
+  if (selectedTimeSlot === "now") {
+    return "Now";
+  }
+
+  // Find the selected time slot label
+  const selectedSlot = timeSlots.find(
+    (slot: any) => slot.id === selectedTimeSlot
+  );
+  if (selectedSlot?.label) {
+    return selectedSlot.label; // e.g. "12:22 - 12:44"
+  }
+
+  // Fallback (shouldn't happen)
+  return "ASAP";
+};

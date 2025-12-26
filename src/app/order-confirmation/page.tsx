@@ -81,17 +81,18 @@ export default function OrderConfirmation() {
 
   const isCash = latestOrder?.paymentMethod === "cash";
 
-  // Accurate breakdown
-  const itemsTotal =
-    latestOrder && latestOrder.total && latestOrder.deliveryFee !== undefined
-      ? latestOrder.total - latestOrder.deliveryFee - SERVICE_CHARGE
-      : 0;
 
-  const amountToPayOnline = isCash
-    ? itemsTotal + SERVICE_CHARGE // Cash: pay items + service charge online
-    : latestOrder?.total || 0; // Card: pay full total (includes everything)
+  const fullTotal = latestOrder?.total ?? 0; 
+  const deliveryFeeStored = latestOrder?.deliveryFee ?? 0; 
 
-  const amountToPayOnDelivery = isCash ? latestOrder?.deliveryFee || 0 : 0;
+  const amountToPayOnline =
+    latestOrder?.amountPaidOnline ??
+    (isCash
+      ? fullTotal - deliveryFeeStored
+      : fullTotal); 
+
+  const amountDueOnDelivery =
+    latestOrder?.amountDueOnDelivery ?? (isCash ? deliveryFeeStored : 0); 
 
   // Copy code
   const handleCopyCode = async () => {
@@ -113,7 +114,7 @@ export default function OrderConfirmation() {
 
     payWithPaystack({
       email: user?.email || "user@example.com",
-      amount: amountToPayOnline,
+      amount: amountToPayOnline, 
       reference: latestOrder.orderId || latestOrder.$id,
       orderId: latestOrder.$id,
       onSuccess: () => router.push(`/myorders/${latestOrder.orderId}`),
@@ -305,7 +306,7 @@ export default function OrderConfirmation() {
                   {latestOrder.status.replace(/_/g, " ").toLowerCase()}
                 </p>
                 <p className="text-lg font-bold text-gray-900 dark:text-white">
-                  Track your order for live updates!
+                  {latestOrder.deliveryTime || "ASAP"}
                 </p>
               </div>
             </motion.div>
@@ -351,72 +352,37 @@ export default function OrderConfirmation() {
               </span>
             </motion.div>
 
-            {/* Delivery Fee Info (Only for Cash) */}
-            {isCash && amountToPayOnDelivery > 0 && (
+            {/* Cash Payment Breakdown (only shown for cash) */}
+            {isCash && amountDueOnDelivery > 0 && (
               <motion.div
                 initial={{ y: 10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.75 }}
-                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700"
+                className="p-5 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-800"
               >
-                <div className="flex items-center gap-3">
-                  <Truck className="w-5 h-5 text-orange-500" />
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                    Delivery Fee
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">
-                    ₦{amountToPayOnDelivery.toLocaleString()}
-                  </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 block">
-                    Pay to rider on delivery
-                  </span>
+                <h4 className="font-semibold text-amber-800 dark:text-amber-300 mb-3">
+                  Payment Breakdown (Cash on Delivery)
+                </h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Now (Items + Service Charge):</span>
+                    <span className="font-bold">
+                      ₦{amountToPayOnline.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>On Delivery (Delivery Fee):</span>
+                    <span className="font-bold">
+                      ₦{amountDueOnDelivery.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-medium text-lg pt-2 border-t border-amber-300 dark:border-amber-700 mt-2">
+                    <span>Total Order Value:</span>
+                    <span>₦{fullTotal.toLocaleString()}</span>
+                  </div>
                 </div>
               </motion.div>
             )}
-
-            {/* Unpaid Alert */}
-            <AnimatePresence>
-              {!latestOrder.paid && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl"
-                >
-                  <div className="flex items-start gap-3">
-                    <CreditCard className="w-5 h-5 text-amber-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-amber-900 dark:text-amber-200 mb-1">
-                        Payment Required
-                      </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                        {isCash ? (
-                          <>
-                            Pay{" "}
-                            <strong>
-                              ₦{amountToPayOnline.toLocaleString()}
-                            </strong>{" "}
-                            now (items + service charge). Pay{" "}
-                            <strong>
-                              ₦{amountToPayOnDelivery.toLocaleString()}
-                            </strong>{" "}
-                            delivery fee to rider on arrival.
-                          </>
-                        ) : (
-                          <>
-                            Complete payment of ₦
-                            {amountToPayOnline.toLocaleString()} to confirm your
-                            order.
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
             {/* Action Buttons */}
             <motion.div
@@ -441,14 +407,17 @@ export default function OrderConfirmation() {
                     <>
                       <CreditCard className="w-5 h-5 mr-2" />
                       Pay ₦{amountToPayOnline.toLocaleString()} Now
-                      {isCash && (
-                        <span className="ml-2 text-xs opacity-90">
-                          (Items + Service Charge)
-                        </span>
-                      )}
                     </>
                   )}
                 </Button>
+              )}
+
+              {/* Additional info for cash */}
+              {isCash && amountDueOnDelivery > 0 && !latestOrder.paid && (
+                <p className="text-sm text-center text-amber-700 dark:text-amber-300">
+                  + ₦{amountDueOnDelivery.toLocaleString()} delivery fee to
+                  rider on arrival
+                </p>
               )}
 
               {/* Track / Feedback + Cancel */}

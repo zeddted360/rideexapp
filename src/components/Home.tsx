@@ -7,12 +7,10 @@ import { useState, useEffect } from "react";
 import MiniNavigation from "@/components/Hero";
 import { useSelector, useDispatch } from "react-redux";
 import { AppDispatch, RootState } from "@/state/store";
-import { motion } from "framer-motion";
-import { Skeleton } from "@/components/ui/skeleton";
 import { listAllAsyncExtras } from "@/state/extraSlice";
 import { usePathname } from "next/navigation";
 import DiscountsList from "./DiscountList";
-import OffersSection from "./OffersSection"; // Import the new component
+import OffersSection from "./OffersSection"; 
 import { useRouter } from "next/navigation";
 
 export default function HomeClient() {
@@ -26,7 +24,7 @@ export default function HomeClient() {
   const pathname = usePathname();
   const router = useRouter();
   useEffect(() => {
-    dispatch(listAllAsyncExtras()); // Fetch extras for badge rendering
+    dispatch(listAllAsyncExtras()); 
   }, [dispatch]);
 
   const toggleFavorite = (id: string) => {
@@ -47,7 +45,7 @@ export default function HomeClient() {
       <Menu />
       <FeaturedItem toggleFavorite={toggleFavorite} favorites={favorites} />
       <PromotionalBanner />
-      <OffersSection /> {/* Replace renderOffers() with this */}
+      <OffersSection /> 
       <PopularItem toggleFavorite={toggleFavorite} favorites={favorites} />
       <DiscountsList />
     </div>

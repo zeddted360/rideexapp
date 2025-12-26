@@ -36,7 +36,7 @@ import PaymentMethodSelector, {
   PaymentMethod,
 } from "@/components/checkout/PaymentMethodSelector";
 import PlaceOrderButton from "@/components/checkout/PlaceOrderButton";
-import { generateTimeSlots, formatDeliveryTime } from "@/utils/checkoutUtils";
+import { generateTimeSlots, formatDeliveryTime, getDeliveryTimeLabel } from "@/utils/checkoutUtils";
 import { branches } from "../../../data/branches";
 import { useAuth } from "@/context/authContext";
 import ShowCashModal from "./ShowCashModal";
@@ -557,12 +557,18 @@ export default function CheckoutClient() {
         paymentMethod,
         address,
         label,
-        deliveryTime: formatDeliveryTime(calculateDeliveryTime()),
+        deliveryTime: getDeliveryTimeLabel(
+          deliveryDay,
+          selectedTimeSlot,
+          timeSlots
+        ), 
         createdAt: new Date().toISOString(),
-        total:
+        total: subtotal + deliveryFee + SERVICE_CHARGE,
+        amountPaidOnline:
           paymentMethod === "cash"
             ? subtotal + SERVICE_CHARGE
             : subtotal + deliveryFee + SERVICE_CHARGE,
+        amountDueOnDelivery: paymentMethod === "cash" ? deliveryFee : 0,
         status: "pending" as OrderStatus,
         phone: phoneNumber,
         customerId: userId,

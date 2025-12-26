@@ -69,6 +69,7 @@ export default function OrderDetailsPage() {
     (state: RootState) => state.bookedOrders
   );
 
+
   const menuItems = useSelector((state: RootState) => state.menuItem.menuItems);
   const featuredItems = useSelector(
     (state: RootState) => state.featuredItem.featuredItems
@@ -209,20 +210,24 @@ export default function OrderDetailsPage() {
     }
   };
 
+  const isCash = currentOrder?.paymentMethod === "cash";
+  const fullTotal = currentOrder?.total ?? 0;
+  const deliveryFeeStored = currentOrder?.deliveryFee ?? 0;
+  const amountToPayOnline = isCash ? fullTotal - deliveryFeeStored : fullTotal;
+
+  const amountDueOnDelivery = isCash ? deliveryFeeStored : 0;
+
   const handlePayNow = () => {
     if (!currentOrder) return;
-    const amountToPay =
-      currentOrder.paymentMethod === "cash"
-        ? currentOrder.total - currentOrder.deliveryFee // Pay for items only
-        : currentOrder.total; // Pay full amount
 
     payWithPaystack({
       email: user?.email || "user@example.com",
-      amount: amountToPay,
+      amount: amountToPayOnline,
       reference: currentOrder.orderId || currentOrder.$id,
       orderId: currentOrder.$id,
       onSuccess: () => {
-        router.push("/myorders");
+        // refresh order after payment
+        dispatch(fetchBookedOrderById(currentOrder.$id));
       },
       onClose: () => {},
     });
@@ -256,8 +261,6 @@ export default function OrderDetailsPage() {
     currentOrder.deliveryDuration || "",
     currentOrder.deliveryTime || ""
   );
-
-  const isCash = currentOrder.paymentMethod === "cash";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 px-4 py-6">
@@ -682,16 +685,18 @@ export default function OrderDetailsPage() {
                 ) : (
                   <>
                     <CreditCard className="w-5 h-5 mr-2" />
-                    Pay ₦
-                    {isCash
-                      ? (
-                          currentOrder.total - currentOrder.deliveryFee
-                        ).toLocaleString()
-                      : currentOrder.total?.toLocaleString()}{" "}
-                    Now
+                    Pay ₦{amountToPayOnline.toLocaleString()} Now
                   </>
                 )}
               </Button>
+            )}
+
+            {/* Clear message for cash users */}
+            {isCash && amountDueOnDelivery > 0 && !currentOrder.paid && (
+              <p className="text-sm text-center text-amber-700 dark:text-amber-300 mt-2">
+                + ₦{amountDueOnDelivery.toLocaleString()} delivery fee to rider
+                on arrival
+              </p>
             )}
 
             {canCancel && (

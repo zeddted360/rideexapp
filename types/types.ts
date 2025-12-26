@@ -228,6 +228,8 @@ export interface IBookedOrderFetched extends Models.Document {
   deliveryTime: string;
   createdAt: string;
   total: number;
+  amountPaidOnline: number;
+  amountDueOnDelivery:number;
   status: OrderStatus;
   phone: string;
   deliveryFee: number;

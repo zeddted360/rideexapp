@@ -559,12 +559,11 @@ const AddFoodItemForm = () => {
         break;
     }
     setEditFormData(formData);
-    // console.log("The form data to be submitted  is :", formData);
 
     setNewImage(null);
     setShowEditModal(true);
   };
-  // NEW: Delete handler - sets the selected item and opens the confirmation modal
+
   const handleDelete = (
     item:
       | IMenuItemFetched
@@ -574,7 +573,7 @@ const AddFoodItemForm = () => {
     type: "menu" | "featured" | "popular" | "discount"
   ) => {
     setSelectedItem(item);
-    setSubActiveTab(type); // Ensure the sub-tab is set correctly for the delete action
+    setSubActiveTab(type);
     setShowDeleteModal(true);
   };
 
@@ -662,7 +661,6 @@ const AddFoodItemForm = () => {
       : popularBucketId;
   };
 
-  // UPDATED: Improved renderItemCard with better delete button (fixed text, added icon, improved accessibility and hover effects)
   const renderItemCard = (
     item:
       | IMenuItemFetched
