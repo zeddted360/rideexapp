@@ -436,11 +436,7 @@ const OrdersList = ({
                               <>
                                 <CreditCardIcon className="w-4 h-4 mr-2" />
                                 Pay ₦{amountToPayNow.toLocaleString()}
-                                {isCash && (
-                                  <span className="ml-1 text-xs">
-                                    (Items + Service)
-                                  </span>
-                                )}
+                               
                               </>
                             )}
                           </Button>
