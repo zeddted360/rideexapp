@@ -8,6 +8,7 @@ import { account, databases, validateEnv } from "@/utils/appwrite";
 import { Loader } from "@googlemaps/js-api-loader";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
+import { useGlobalMapControl } from "@/hooks/useGlobalMapControl";
 
 const MyAddresses = () => {
   const [addresses, setAddresses] = useState<string[]>([]);
@@ -26,6 +27,7 @@ const MyAddresses = () => {
   } | null>(null);
   const [pickedLocation, setPickedLocation] =
     useState<google.maps.LatLng | null>(null);
+
   const autocompleteInput = useRef<HTMLInputElement | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -38,6 +40,13 @@ const MyAddresses = () => {
   const dragendListenerRef = useRef<google.maps.MapsEventListener | null>(null);
   const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
 
+  const {
+    isPaused: isMapPaused,
+    loading: pauseLoading,
+    message: pauseMessage,
+  } = useGlobalMapControl();
+
+  // Get user current location
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -46,13 +55,12 @@ const MyAddresses = () => {
           lng: pos.coords.longitude,
         });
       },
-      (err) => {
-        console.error("Geolocation error:", err);
-      },
+      (err) => console.error("Geolocation error:", err),
       { enableHighAccuracy: true, maximumAge: 0 }
     );
   }, []);
 
+  // Load user's saved addresses
   useEffect(() => {
     (async () => {
       try {
@@ -63,11 +71,7 @@ const MyAddresses = () => {
           userCollectionId,
           userData.$id
         );
-        if (Array.isArray(userDoc.address)) {
-          setAddresses(userDoc.address);
-        } else {
-          setAddresses([]);
-        }
+        setAddresses(Array.isArray(userDoc.address) ? userDoc.address : []);
       } catch {
         setAddresses([]);
       } finally {
@@ -76,9 +80,11 @@ const MyAddresses = () => {
     })();
   }, []);
 
+  // Load Google Maps SDK
   useEffect(() => {
     const { googleMapsApiKey } = validateEnv();
     if (!googleMapsApiKey) return;
+
     const loader = new Loader({
       apiKey: googleMapsApiKey,
       version: "weekly",
@@ -87,235 +93,239 @@ const MyAddresses = () => {
     loader.load().then(() => setMapLoaded(true));
   }, []);
 
+  // Autocomplete setup
   useEffect(() => {
     if (
-      mapLoaded &&
-      showAddForm &&
-      addressMode === "search" &&
-      autocompleteInput.current &&
-      !autocompleteRef.current
-    ) {
-      const imoSouthWest = new window.google.maps.LatLng(4.75, 6.83);
-      const imoNorthEast = new window.google.maps.LatLng(5.92, 7.42);
-      const imoBounds = new window.google.maps.LatLngBounds(
-        imoSouthWest,
-        imoNorthEast
-      );
+      !mapLoaded ||
+      !showAddForm ||
+      addressMode !== "search" ||
+      !autocompleteInput.current ||
+      isMapPaused
+    )
+      return;
 
-      autocompleteRef.current = new window.google.maps.places.Autocomplete(
-        autocompleteInput.current,
-        {
-          types: [],
-          componentRestrictions: { country: "ng" },
-          bounds: imoBounds,
-          strictBounds: false,
-        }
-      );
-      autocompleteRef.current.addListener("place_changed", () => {
+    const imoSouthWest = new window.google.maps.LatLng(4.75, 6.83);
+    const imoNorthEast = new window.google.maps.LatLng(5.92, 7.42);
+    const imoBounds = new window.google.maps.LatLngBounds(
+      imoSouthWest,
+      imoNorthEast
+    );
+
+    autocompleteRef.current = new window.google.maps.places.Autocomplete(
+      autocompleteInput.current,
+      {
+        types: [],
+        componentRestrictions: { country: "ng" },
+        bounds: imoBounds,
+        strictBounds: false,
+      }
+    );
+
+    const placeChangedListener = autocompleteRef.current.addListener(
+      "place_changed",
+      () => {
         const place = autocompleteRef.current?.getPlace();
         if (place?.formatted_address) {
           setNewAddress(place.formatted_address);
           if (place.geometry?.location) {
-            const latlng = place.geometry.location;
-            setPickedLocation(latlng);
-            setAddressMode("map"); // Switch to map mode to show centered on selected place
+            setPickedLocation(place.geometry.location);
+            setAddressMode("map");
           }
         } else if (place?.name) {
           setNewAddress(place.name);
         }
-      });
-    }
+      }
+    );
 
     return () => {
+      if (placeChangedListener)
+        google.maps.event.removeListener(placeChangedListener);
       if (autocompleteRef.current) {
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
         autocompleteRef.current = null;
       }
     };
-  }, [mapLoaded, showAddForm, addressMode]);
+  }, [mapLoaded, showAddForm, addressMode, isMapPaused]);
 
+  // Map initialization - only when not paused
   useEffect(() => {
     if (
-      showAddForm &&
-      addressMode === "map" &&
-      mapLoaded &&
-      mapRef.current &&
-      !mapInstance.current
-    ) {
-      geocoderRef.current = new window.google.maps.Geocoder();
-      const center =
-        pickedLocation ||
-        (userLocation
-          ? new window.google.maps.LatLng(userLocation.lat, userLocation.lng)
-          : new window.google.maps.LatLng(5.4768, 7.0308));
-      const zoom = pickedLocation || userLocation ? 15 : 10;
+      !mapLoaded ||
+      !showAddForm ||
+      addressMode !== "map" ||
+      isMapPaused ||
+      !mapRef.current
+    )
+      return;
 
-      mapInstance.current = new window.google.maps.Map(mapRef.current, {
-        center: center,
-        zoom,
-        mapTypeId: "roadmap" as google.maps.MapTypeId,
+    geocoderRef.current = new window.google.maps.Geocoder();
+    const center =
+      pickedLocation ||
+      (userLocation
+        ? new window.google.maps.LatLng(userLocation.lat, userLocation.lng)
+        : new window.google.maps.LatLng(5.4768, 7.0308));
+    const zoom = pickedLocation || userLocation ? 15 : 10;
+
+    mapInstance.current = new window.google.maps.Map(mapRef.current, {
+      center,
+      zoom,
+      mapTypeId: "roadmap" as google.maps.MapTypeId,
+    });
+
+    // Current location marker
+    if (userLocation && !pickedLocation && !currentMarkerRef.current) {
+      currentMarkerRef.current = new window.google.maps.Marker({
+        position: new window.google.maps.LatLng(
+          userLocation.lat,
+          userLocation.lng
+        ),
+        map: mapInstance.current,
+        title: "Your Current Location",
+        icon: { url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png" },
       });
+    }
 
-      // Add current location marker if available and no picked location
-      if (userLocation && !pickedLocation && !currentMarkerRef.current) {
-        currentMarkerRef.current = new window.google.maps.Marker({
-          position: new window.google.maps.LatLng(
-            userLocation.lat,
-            userLocation.lng
-          ),
-          map: mapInstance.current,
-          title: "Your Current Location",
-          icon: {
-            url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-          },
-        });
-      }
+    // Draggable marker
+    if (pickedLocation && !markerRef.current) {
+      markerRef.current = new window.google.maps.Marker({
+        position: pickedLocation,
+        map: mapInstance.current,
+        draggable: true,
+        title: "Drag to adjust location",
+      });
+    }
 
-      // Create draggable marker if pickedLocation exists
-      if (pickedLocation && !markerRef.current) {
-        markerRef.current = new window.google.maps.Marker({
-          position: pickedLocation,
-          map: mapInstance.current,
-          draggable: true,
-          title: "Drag to adjust location",
-        });
-      }
-
-      // Add dragend listener if marker exists
-      if (markerRef.current && !dragendListenerRef.current) {
-        dragendListenerRef.current = google.maps.event.addListener(
-          markerRef.current,
-          "dragend",
-          (event: google.maps.MapMouseEvent) => {
-            const latlng = event.latLng;
-            if (!latlng) return;
-            setPickedLocation(latlng);
-
-            // Reverse geocode
-            geocoderRef.current?.geocode(
-              { location: latlng },
-              (results, status) => {
-                if (
-                  status === window.google.maps.GeocoderStatus.OK &&
-                  results &&
-                  results[0]
-                ) {
-                  setNewAddress(results[0].formatted_address || "");
-                } else {
-                  const lat = latlng.lat().toFixed(6);
-                  const lng = latlng.lng().toFixed(6);
-                  setNewAddress(`${lat}, ${lng}`);
-                }
-              }
-            );
-          }
-        );
-      }
-
-      // Add click listener to place or move marker
-      if (!clickListenerRef.current) {
-        clickListenerRef.current = google.maps.event.addListener(
-          mapInstance.current,
-          "click",
-          (event: google.maps.MapMouseEvent) => {
-            const latlng = event.latLng;
-            if (!latlng) return;
-
-            setPickedLocation(latlng);
-
-            // Remove or move previous marker
-            if (markerRef.current) {
-              markerRef.current.setPosition(latlng);
-            } else {
-              markerRef.current = new window.google.maps.Marker({
-                position: latlng,
-                map: mapInstance.current,
-                draggable: true,
-                title: "Drag to adjust location",
-              });
-
-              // Add dragend listener to new marker
-              if (!dragendListenerRef.current) {
-                dragendListenerRef.current = google.maps.event.addListener(
-                  markerRef.current,
-                  "dragend",
-                  (dragEvent: google.maps.MapMouseEvent) => {
-                    const dragLatlng = dragEvent.latLng;
-                    if (!dragLatlng) return;
-                    setPickedLocation(dragLatlng);
-
-                    geocoderRef.current?.geocode(
-                      { location: dragLatlng },
-                      (results, status) => {
-                        if (
-                          status === window.google.maps.GeocoderStatus.OK &&
-                          results &&
-                          results[0]
-                        ) {
-                          setNewAddress(results[0].formatted_address || "");
-                        } else {
-                          const lat = dragLatlng.lat().toFixed(6);
-                          const lng = dragLatlng.lng().toFixed(6);
-                          setNewAddress(`${lat}, ${lng}`);
-                        }
-                      }
-                    );
-                  }
+    // Drag end listener
+    if (markerRef.current && !dragendListenerRef.current) {
+      dragendListenerRef.current = google.maps.event.addListener(
+        markerRef.current,
+        "dragend",
+        (event: google.maps.MapMouseEvent) => {
+          const latlng = event.latLng;
+          if (!latlng) return;
+          setPickedLocation(latlng);
+          geocoderRef.current?.geocode(
+            { location: latlng },
+            (results, status) => {
+              if (
+                status === window.google.maps.GeocoderStatus.OK &&
+                results?.[0]
+              ) {
+                setNewAddress(results[0].formatted_address || "");
+              } else {
+                setNewAddress(
+                  `${latlng.lat().toFixed(6)}, ${latlng.lng().toFixed(6)}`
                 );
               }
             }
+          );
+        }
+      );
+    }
 
-            // Reverse geocode for click position
-            geocoderRef.current?.geocode(
-              { location: latlng },
-              (results, status) => {
-                if (
-                  status === window.google.maps.GeocoderStatus.OK &&
-                  results &&
-                  results[0]
-                ) {
-                  setNewAddress(results[0].formatted_address || "");
-                } else {
-                  const lat = latlng.lat().toFixed(6);
-                  const lng = latlng.lng().toFixed(6);
-                  setNewAddress(`${lat}, ${lng}`);
-                }
+    // Click to place marker
+    if (!clickListenerRef.current) {
+      clickListenerRef.current = google.maps.event.addListener(
+        mapInstance.current,
+        "click",
+        (event: google.maps.MapMouseEvent) => {
+          const latlng = event.latLng;
+          if (!latlng) return;
+          setPickedLocation(latlng);
+
+          if (markerRef.current) {
+            markerRef.current.setPosition(latlng);
+          } else {
+            markerRef.current = new window.google.maps.Marker({
+              position: latlng,
+              map: mapInstance.current,
+              draggable: true,
+              title: "Drag to adjust location",
+            });
+
+            dragendListenerRef.current = google.maps.event.addListener(
+              markerRef.current,
+              "dragend",
+              (dragEvent: google.maps.MapMouseEvent) => {
+                const dragLatlng = dragEvent.latLng;
+                if (!dragLatlng) return;
+                setPickedLocation(dragLatlng);
+                geocoderRef.current?.geocode(
+                  { location: dragLatlng },
+                  (results, status) => {
+                    if (
+                      status === window.google.maps.GeocoderStatus.OK &&
+                      results?.[0]
+                    ) {
+                      setNewAddress(results[0].formatted_address || "");
+                    } else {
+                      setNewAddress(
+                        `${dragLatlng.lat().toFixed(6)}, ${dragLatlng
+                          .lng()
+                          .toFixed(6)}`
+                      );
+                    }
+                  }
+                );
               }
             );
           }
-        );
-      }
 
-      return () => {
-        if (clickListenerRef.current) {
-          google.maps.event.removeListener(clickListenerRef.current);
-          clickListenerRef.current = null;
+          geocoderRef.current?.geocode(
+            { location: latlng },
+            (results, status) => {
+              if (
+                status === window.google.maps.GeocoderStatus.OK &&
+                results?.[0]
+              ) {
+                setNewAddress(results[0].formatted_address || "");
+              } else {
+                setNewAddress(
+                  `${latlng.lat().toFixed(6)}, ${latlng.lng().toFixed(6)}`
+                );
+              }
+            }
+          );
         }
-        if (dragendListenerRef.current) {
-          google.maps.event.removeListener(dragendListenerRef.current);
-          dragendListenerRef.current = null;
-        }
-        if (markerRef.current) {
-          markerRef.current.setMap(null);
-          markerRef.current = null;
-        }
-        if (currentMarkerRef.current) {
-          currentMarkerRef.current.setMap(null);
-          currentMarkerRef.current = null;
-        }
-        if (mapInstance.current) {
-          google.maps.event.clearInstanceListeners(mapInstance.current);
-          mapInstance.current = null;
-        }
-      };
+      );
     }
-  }, [showAddForm, addressMode, mapLoaded, userLocation, pickedLocation]);
+
+    return () => {
+      if (clickListenerRef.current) {
+        google.maps.event.removeListener(clickListenerRef.current);
+        clickListenerRef.current = null;
+      }
+      if (dragendListenerRef.current) {
+        google.maps.event.removeListener(dragendListenerRef.current);
+        dragendListenerRef.current = null;
+      }
+      if (markerRef.current) {
+        markerRef.current.setMap(null);
+        markerRef.current = null;
+      }
+      if (currentMarkerRef.current) {
+        currentMarkerRef.current.setMap(null);
+        currentMarkerRef.current = null;
+      }
+      if (mapInstance.current) {
+        google.maps.event.clearInstanceListeners(mapInstance.current);
+        mapInstance.current = null;
+      }
+    };
+  }, [
+    mapLoaded,
+    showAddForm,
+    addressMode,
+    isMapPaused,
+    userLocation,
+    pickedLocation,
+  ]);
 
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAddress.trim()) return;
+
     setLoading(true);
-    setError(null);
     try {
       const userData = await account.get();
       const { databaseId, userCollectionId } = validateEnv();
@@ -349,7 +359,6 @@ const MyAddresses = () => {
 
   const handleDeleteAddress = async (idx: number) => {
     setLoading(true);
-    setError(null);
     try {
       const userData = await account.get();
       const { databaseId, userCollectionId } = validateEnv();
@@ -365,7 +374,7 @@ const MyAddresses = () => {
       setAddresses(updatedAddresses);
       toast.success("Address deleted successfully!");
       setDeleteConfirm(null);
-    } catch (err) {
+    } catch {
       setError("Failed to delete address.");
       toast.error("Failed to delete address");
     } finally {
@@ -374,10 +383,10 @@ const MyAddresses = () => {
   };
 
   const modeButtons = [
-    { key: "search", label: "Search", mode: "search" as const },
-    { key: "map", label: "Map", mode: "map" as const },
-    { key: "manual", label: "Manual", mode: "manual" as const },
-  ];
+    { key: "search", label: "Search" },
+    { key: "map", label: "Map" },
+    { key: "manual", label: "Manual" },
+  ] as const;
 
   if (initialLoading) {
     return (
@@ -495,120 +504,159 @@ const MyAddresses = () => {
                   </button>
                 </div>
 
-                <div className="p-6 space-y-5">
-                  <form onSubmit={handleAddAddress}>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        {addressMode === "map"
-                          ? "Pick your location on the map"
-                          : addressMode === "manual"
-                          ? "Enter address manually"
-                          : "Search for your address or place"}
-                      </label>
-                      {addressMode === "search" && (
-                        <input
-                          ref={autocompleteInput}
-                          type="text"
-                          value={newAddress}
-                          onChange={(e) => setNewAddress(e.target.value)}
-                          placeholder="Start typing your address or place..."
-                          className="w-full rounded-xl px-4 py-3 text-base border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"
-                        />
-                      )}
-                      {addressMode === "manual" && (
+                <div className="p-6">
+                  {pauseLoading ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                      <Loader2 className="w-12 h-12 animate-spin text-orange-500" />
+                      <p className="text-lg font-medium text-gray-700 dark:text-gray-300">
+                        Loading map services...
+                      </p>
+                    </div>
+                  ) : isMapPaused ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center space-y-6">
+                      <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                        <MapPin className="w-10 h-10 text-amber-600 dark:text-amber-400 opacity-80" />
+                      </div>
+
+                      <div className="space-y-4">
+                        <h3 className="text-2xl font-bold text-amber-800 dark:text-amber-300">
+                          Location Services Unavailable
+                        </h3>
+                        <p className="text-gray-700 dark:text-gray-300 max-w-md">
+                          {pauseMessage ||
+                            "Address search and map picking are temporarily unavailable. Please try again later."}
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Our team is working to restore full functionality as
+                          soon as possible.
+                        </p>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowAddForm(false)}
+                        className="mt-6 px-10 h-11 rounded-xl font-semibold border-2"
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleAddAddress} className="space-y-6">
+                      <div className="space-y-4">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {addressMode === "map"
+                            ? "Pick your location on the map"
+                            : addressMode === "manual"
+                            ? "Enter address manually"
+                            : "Search for your address or place"}
+                        </label>
+
+                        {addressMode === "search" && (
+                          <input
+                            ref={autocompleteInput}
+                            type="text"
+                            value={newAddress}
+                            onChange={(e) => setNewAddress(e.target.value)}
+                            placeholder="Start typing your address or place..."
+                            className="w-full rounded-xl px-4 py-3 text-base border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"
+                          />
+                        )}
+
+                        {addressMode === "manual" && (
+                          <Input
+                            value={newAddress}
+                            onChange={(e) => setNewAddress(e.target.value)}
+                            placeholder="Enter full address manually"
+                            className="w-full rounded-xl px-4 py-3 text-base border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-orange-500 bg-gray-50 dark:bg-gray-900"
+                          />
+                        )}
+
+                        {addressMode === "map" && (
+                          <div className="relative">
+                            <div
+                              ref={mapRef}
+                              className="w-full h-64 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-200"
+                            />
+                            {newAddress && (
+                              <p className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+                                Selected: {newAddress}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {modeButtons.map(({ key, label }) => (
+                            <Button
+                              key={key}
+                              type="button"
+                              variant={
+                                addressMode === key ? "default" : "outline"
+                              }
+                              size="sm"
+                              onClick={() => {
+                                setAddressMode(key);
+                                if (key !== "map") setPickedLocation(null);
+                              }}
+                              className={
+                                addressMode === key
+                                  ? "bg-orange-500 text-white hover:bg-orange-600"
+                                  : ""
+                              }
+                            >
+                              {label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Apartment/Flat/Suite (Optional)
+                        </label>
                         <Input
-                          value={newAddress}
-                          onChange={(e) => setNewAddress(e.target.value)}
-                          placeholder="Enter full address manually"
+                          value={apartmentFlat}
+                          onChange={(e) => setApartmentFlat(e.target.value)}
+                          placeholder="e.g. Apt 2B, Suite 301, Flat 4"
                           className="w-full rounded-xl px-4 py-3 text-base border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-orange-500 bg-gray-50 dark:bg-gray-900"
                         />
-                      )}
-                      {addressMode === "map" && (
-                        <div className="relative">
-                          <div
-                            ref={mapRef}
-                            className="w-full h-64 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-200"
-                          />
-                          {newAddress && (
-                            <p className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-gray-700 dark:text-gray-300">
-                              Selected: {newAddress}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-2 pt-3">
-                        {modeButtons.map(({ key, label, mode }) => (
-                          <Button
-                            key={key}
-                            type="button"
-                            variant={
-                              addressMode === mode ? "default" : "outline"
-                            }
-                            size="sm"
-                            onClick={() => {
-                              setAddressMode(mode);
-                              if (mode !== "map") {
-                                setPickedLocation(null);
-                              }
-                            }}
-                            className={`${
-                              addressMode === mode
-                                ? "bg-orange-500 text-white hover:bg-orange-600"
-                                : ""
-                            }`}
-                          >
-                            {label}
-                          </Button>
-                        ))}
                       </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Apartment/Flat/Suite (Optional)
-                      </label>
-                      <Input
-                        value={apartmentFlat}
-                        onChange={(e) => setApartmentFlat(e.target.value)}
-                        placeholder="e.g. Apt 2B, Suite 301, Flat 4"
-                        className="w-full rounded-xl px-4 py-3 text-base border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-orange-500 bg-gray-50 dark:bg-gray-900"
-                      />
-                    </div>
-
-                    <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setShowAddForm(false);
-                          setAddressMode("search");
-                          setNewAddress("");
-                          setApartmentFlat("");
-                          setPickedLocation(null);
-                        }}
-                        className="w-full sm:flex-1 h-12 rounded-xl font-semibold border-2"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={loading || !newAddress.trim()}
-                        className="w-full sm:flex-1 h-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="w-5 h-5 mr-2" />
-                            Add Address
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </form>
+                      <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setShowAddForm(false);
+                            setAddressMode("search");
+                            setNewAddress("");
+                            setApartmentFlat("");
+                            setPickedLocation(null);
+                          }}
+                          className="w-full sm:flex-1 h-12 rounded-xl font-semibold border-2"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={loading || !newAddress.trim()}
+                          className="w-full sm:flex-1 h-12 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+                        >
+                          {loading ? (
+                            <>
+                              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                              Adding...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-5 h-5 mr-2" />
+                              Add Address
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               </motion.div>
             </motion.div>

@@ -36,7 +36,11 @@ import PaymentMethodSelector, {
   PaymentMethod,
 } from "@/components/checkout/PaymentMethodSelector";
 import PlaceOrderButton from "@/components/checkout/PlaceOrderButton";
-import { generateTimeSlots, formatDeliveryTime, getDeliveryTimeLabel } from "@/utils/checkoutUtils";
+import {
+  generateTimeSlots,
+  formatDeliveryTime,
+  getDeliveryTimeLabel,
+} from "@/utils/checkoutUtils";
 import { branches } from "../../../data/branches";
 import { useAuth } from "@/context/authContext";
 import ShowCashModal from "./ShowCashModal";
@@ -49,6 +53,8 @@ import {
   sendOrderFeedback,
 } from "@/utils/sendSmsToNumber";
 import toast from "react-hot-toast";
+import { useGlobalMapControl } from "@/hooks/useGlobalMapControl";
+import { MapPin, AlertTriangle, Loader2 } from "lucide-react";
 
 export default function CheckoutClient() {
   const SERVICE_CHARGE = 200; // Fixed platform fee
@@ -105,7 +111,6 @@ export default function CheckoutClient() {
 
   const orders = useSelector((state: RootState) => state.orders.orders) || [];
 
-
   const subtotal = useMemo(
     () => orders.reduce((sum, item) => sum + (item.totalPrice || 0), 0),
     [orders]
@@ -120,6 +125,12 @@ export default function CheckoutClient() {
 
   // Add service charge (always applied, even for cash)
   const totalAmount = subtotal + effectiveDeliveryFee + SERVICE_CHARGE;
+
+  const {
+    isPaused: isMapPaused,
+    loading: mapLoading,
+    message: mapPauseMessage,
+  } = useGlobalMapControl();
 
   // Memoized branch data
   const selectedBranchData = useMemo(
@@ -255,12 +266,24 @@ export default function CheckoutClient() {
     if (orders.length > 0) {
       fetchRestaurantAddresses();
     }
-    // Removed unnecessary setRestaurantAddresses({}) to avoid extra re-render on initial mount
   }, [orders]);
 
   // Calculate delivery fee + show service charge
   useEffect(() => {
     const calculateFee = async () => {
+      if (mapLoading) {
+        setIsCalculatingFee(true);
+        return;
+      }
+
+      if (isMapPaused) {
+        setDeliveryFee(1500); // fallback average – adjust to your business data
+        setDeliveryDistance("≈ 8–15 km (estimated)");
+        setDeliveryDuration("30–60 min (estimated)");
+        setIsCalculatingFee(false);
+        return;
+      }
+
       if (!debouncedAddress.trim() || !selectedBranchData) {
         setDeliveryFee(800);
         setDeliveryDistance("");
@@ -309,7 +332,13 @@ export default function CheckoutClient() {
     };
 
     calculateFee();
-  }, [debouncedAddress, selectedBranchData, handleError]);
+  }, [
+    debouncedAddress,
+    selectedBranchData,
+    handleError,
+    isMapPaused,
+    mapLoading,
+  ]);
 
   // Handle payment method change for cash modal
   useEffect(() => {
@@ -492,7 +521,7 @@ export default function CheckoutClient() {
     } else {
       setShowConfirmation(true);
     }
-  }, []);
+  }, [orders, router]);
 
   // Helper to parse distance in km
   const parseDistanceKm = useCallback((distanceStr: string): number => {
@@ -516,10 +545,17 @@ export default function CheckoutClient() {
     }
 
     // Check delivery distance
-    const distanceKm = parseDistanceKm(deliveryDistance);
-    if (distanceKm > 18) {
-      setShowDistanceExceededModal(true);
-      return;
+    if (!isMapPaused && !mapLoading) {
+      const distanceKm = parseDistanceKm(deliveryDistance);
+      if (distanceKm > 18) {
+        setShowDistanceExceededModal(true);
+        return;
+      }
+    } else if (isMapPaused) {
+      toast("Note: Exact delivery fee & time will be confirmed by rider", {
+        icon: "⚠️",
+        duration: 6000,
+      });
     }
 
     setIsOrderLoading(true);
@@ -561,7 +597,7 @@ export default function CheckoutClient() {
           deliveryDay,
           selectedTimeSlot,
           timeSlots
-        ), 
+        ),
         createdAt: new Date().toISOString(),
         total: subtotal + deliveryFee + SERVICE_CHARGE,
         amountPaidOnline:
@@ -642,6 +678,8 @@ export default function CheckoutClient() {
     parseDistanceKm,
     sendNotification,
     handleError,
+    isMapPaused,
+    mapLoading,
   ]);
 
   if (!isClient) return <LoadingClient />;
@@ -649,6 +687,19 @@ export default function CheckoutClient() {
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-orange-100 via-white to-orange-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 py-12 px-2 sm:px-6 lg:px-8 flex flex-col items-center">
+        {/* Global paused warning banner */}
+        {isMapPaused && !mapLoading && (
+          <div className="w-full max-w-6xl mb-6 p-4 bg-amber-100/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl text-center">
+            <div className="flex items-center justify-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-700 dark:text-amber-400" />
+              <p className="font-medium text-amber-800 dark:text-amber-300">
+                Location services temporarily unavailable • Enter address
+                manually • Delivery fee & time will be confirmed
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -665,11 +716,33 @@ export default function CheckoutClient() {
             </section>
 
             <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
-              <UserLocationMap
-                userLocation={userLocation}
-                address={address}
-                onNewAddressPicked={handleNewAddressPicked}
-              />
+              {mapLoading ? (
+                <div className="h-64 flex items-center justify-center">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-orange-500" />
+                    <p className="text-gray-600 dark:text-gray-300">
+                      Loading map services...
+                    </p>
+                  </div>
+                </div>
+              ) : isMapPaused ? (
+                <div className="h-64 flex flex-col items-center justify-center text-center px-6 py-10 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl">
+                  <MapPin className="h-12 w-12 text-amber-600 dark:text-amber-400 mb-4 opacity-80" />
+                  <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-300 mb-2">
+                    Map services temporarily unavailable
+                  </h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-400 max-w-md">
+                    {mapPauseMessage ||
+                      "We're currently unable to show maps or calculate exact distances. Please enter your address manually."}
+                  </p>
+                </div>
+              ) : (
+                <UserLocationMap
+                  userLocation={userLocation}
+                  address={address}
+                  onNewAddressPicked={handleNewAddressPicked}
+                />
+              )}
             </section>
 
             <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">

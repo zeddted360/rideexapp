@@ -39,6 +39,7 @@ interface EnvConfig {
   adminPhoneNumber: string;
   packsCollectionId: string;
   adminPromotionCodesCollectionId: string;
+  mapSubscriptionsCollectionId: string;
 }
 
 // Validate environment variables
@@ -92,6 +93,7 @@ export function validateEnv(): EnvConfig {
     packsCollectionId: process.env.NEXT_PUBLIC_PACK_COLLECTION_ID,
     adminPromotionCodesCollectionId:
       process.env.NEXT_PUBLIC_APPWRITE_ADMIN_PROMOTION_COLLECTION!,
+    mapSubscriptionsCollectionId:process.env.NEXT_PUBLIC_MAP_SUB_COLLECTION_ID,
   };
 
   // Check for undefined environment variables
@@ -145,6 +147,7 @@ export function validateEnv(): EnvConfig {
     packsCollectionId: requiredEnvVars.packsCollectionId!,
     adminPromotionCodesCollectionId:
       requiredEnvVars.adminPromotionCodesCollectionId!,
+    mapSubscriptionsCollectionId:requiredEnvVars.mapSubscriptionsCollectionId!,
   };
 }
 

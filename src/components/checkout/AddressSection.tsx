@@ -1,10 +1,11 @@
-import React, { MouseEvent, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { MapPin } from "lucide-react";
+import { MapPin, X, Loader2 } from "lucide-react";
+import { useGlobalMapControl } from "@/hooks/useGlobalMapControl";
 
 interface AddressSectionProps {
   offLocationModal: boolean;
@@ -99,6 +100,12 @@ const AddressSection: React.FC<AddressSectionProps> = (props) => {
   } | null>(null);
   const [hasDismissedNewPrompt, setHasDismissedNewPrompt] = useState(false);
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
+
+  const {
+    isPaused: isMapPaused,
+    loading: mapLoading,
+    message: pauseMessage,
+  } = useGlobalMapControl();
 
   // Check if Google Maps is loaded (loaded by parent)
   useEffect(() => {
@@ -542,7 +549,96 @@ const AddressSection: React.FC<AddressSectionProps> = (props) => {
                 )}
                 {addressMode === "add" && (
                   <div className="space-y-3">
-                    {!manualMode ? (
+                    {mapLoading ? (
+                      <div className="py-12 flex flex-col items-center justify-center text-center">
+                        <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
+                        <p className="text-lg font-medium text-gray-700 dark:text-gray-300">
+                          Loading location services...
+                        </p>
+                      </div>
+                    ) : isMapPaused ? (
+                      <div className="py-10 flex flex-col items-center text-center space-y-6">
+                        <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                          <MapPin className="w-10 h-10 text-amber-600 dark:text-amber-400 opacity-80" />
+                        </div>
+
+                        <div className="space-y-4 max-w-md">
+                          <h3 className="text-2xl font-bold text-amber-800 dark:text-amber-300">
+                            Location Services Temporarily Unavailable
+                          </h3>
+                          <p className="text-gray-700 dark:text-gray-300">
+                            {pauseMessage ||
+                              "We can't use address search or map picking at the moment. " +
+                                "Please enter your full delivery address manually."}
+                          </p>
+                          <p className="text-sm text-amber-600 dark:text-amber-400">
+                            Exact delivery fee & time will be confirmed by our
+                            team.
+                          </p>
+                        </div>
+
+                        {/* Manual entry form when paused */}
+                        <div className="w-full space-y-5">
+                          <div className="space-y-2">
+                            <Label htmlFor="manual-address">Full Address</Label>
+                            <Input
+                              id="manual-address"
+                              value={tempAddress}
+                              onChange={(e) => setTempAddress(e.target.value)}
+                              placeholder="Street, area, city, state"
+                              className="rounded-xl"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="apartment">
+                              Apartment / Flat / Suite (optional)
+                            </Label>
+                            <Input
+                              id="apartment"
+                              value={apartmentFlat}
+                              onChange={(e) => setApartmentFlat(e.target.value)}
+                              placeholder="e.g. Flat 2B, Block A"
+                              className="rounded-xl"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Label this address</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {["Home", "Work", "Other"].map((l) => (
+                                <Button
+                                  key={l}
+                                  type="button"
+                                  variant={label === l ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() =>
+                                    setLabel(l as "Home" | "Work" | "Other")
+                                  }
+                                  className="min-w-[80px]"
+                                >
+                                  {l}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {error && (
+                            <p className="text-red-600 dark:text-red-400 text-sm">
+                              {error}
+                            </p>
+                          )}
+
+                          <Button
+                            onClick={handleSave}
+                            disabled={!tempAddress.trim() || !label}
+                            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-6 rounded-xl"
+                          >
+                            Save Address
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
                       <>
                         <div className="relative">
                           <input
@@ -604,34 +700,6 @@ const AddressSection: React.FC<AddressSectionProps> = (props) => {
                           className="w-full text-orange-600 dark:text-orange-400 font-semibold"
                         >
                           Can't find your address? Enter manually
-                        </Button>
-                        {error && (
-                          <p className="text-red-600 text-sm mt-1">{error}</p>
-                        )}
-                        <Button
-                          type="button"
-                          onClick={handleSave}
-                          className="w-full mb-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-base py-3"
-                          disabled={!tempAddress.trim()}
-                        >
-                          Save Address
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Input
-                          value={tempAddress}
-                          onChange={(e) => setTempAddress(e.target.value)}
-                          placeholder="Enter your delivery address manually"
-                          className="rounded-xl"
-                        />
-                        <Button
-                          type="button"
-                          variant="link"
-                          onClick={() => setManualMode(false)}
-                          className="w-full text-orange-600 dark:text-orange-400 font-semibold"
-                        >
-                          Back to address search
                         </Button>
                         {error && (
                           <p className="text-red-600 text-sm mt-1">{error}</p>
