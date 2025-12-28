@@ -2,7 +2,10 @@ import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { databases, validateEnv } from "@/utils/appwrite";
 import { Query } from "appwrite";
 import { IBookedOrderFetched } from "../../types/types";
-
+import {
+  formatNigerianPhone,
+  sendOrderFeedback,
+} from "@/utils/sendSmsToNumber";
 
 interface BookedOrdersState {
   orders: IBookedOrderFetched[];
@@ -17,7 +20,7 @@ const initialState: BookedOrdersState = {
   loading: false,
   error: null,
 };
-// fetch all orders 
+// fetch all orders
 export const fetchBookedOrders = createAsyncThunk<
   IBookedOrderFetched[],
   void,
@@ -38,7 +41,6 @@ export const fetchBookedOrders = createAsyncThunk<
   }
 });
 
-
 // Fetch all booked orders for a user
 export const fetchBookedOrdersByUserId = createAsyncThunk<
   IBookedOrderFetched[],
@@ -47,10 +49,11 @@ export const fetchBookedOrdersByUserId = createAsyncThunk<
 >("bookedOrders/fetchByUserId", async (userId, { rejectWithValue }) => {
   try {
     const { databaseId, bookedOrdersCollectionId } = validateEnv();
-    const response = await databases.listDocuments(databaseId, bookedOrdersCollectionId, [
-      Query.equal("customerId", userId),
-      Query.orderDesc("createdAt"),
-    ]);
+    const response = await databases.listDocuments(
+      databaseId,
+      bookedOrdersCollectionId,
+      [Query.equal("customerId", userId), Query.orderDesc("createdAt")]
+    );
     return response.documents as IBookedOrderFetched[];
   } catch (error) {
     return rejectWithValue(
@@ -67,7 +70,11 @@ export const fetchBookedOrderById = createAsyncThunk<
 >("bookedOrders/fetchById", async (orderId, { rejectWithValue }) => {
   try {
     const { databaseId, bookedOrdersCollectionId } = validateEnv();
-    const response = await databases.getDocument(databaseId, bookedOrdersCollectionId, orderId);
+    const response = await databases.getDocument(
+      databaseId,
+      bookedOrdersCollectionId,
+      orderId
+    );
     return response as IBookedOrderFetched;
   } catch (error) {
     return rejectWithValue(
@@ -84,7 +91,11 @@ export const cancelBookedOrder = createAsyncThunk<
 >("bookedOrders/cancel", async (orderId, { rejectWithValue }) => {
   try {
     const { databaseId, bookedOrdersCollectionId } = validateEnv();
-    await databases.deleteDocument(databaseId, bookedOrdersCollectionId, orderId);
+    await databases.deleteDocument(
+      databaseId,
+      bookedOrdersCollectionId,
+      orderId
+    );
     return orderId;
   } catch (error) {
     return rejectWithValue(
@@ -94,27 +105,62 @@ export const cancelBookedOrder = createAsyncThunk<
 });
 
 // Update booked order status
+
 export const updateBookedOrderAsync = createAsyncThunk<
   IBookedOrderFetched,
   { orderId: string; orderData: Partial<IBookedOrderFetched> },
   { rejectValue: string }
->("bookedOrders/update", async ({ orderId, orderData }, { rejectWithValue }) => {
-  try {
-    const { databaseId, bookedOrdersCollectionId } = validateEnv();
-    const response = await databases.updateDocument(
-      databaseId,
-      bookedOrdersCollectionId,
-      orderId,
-      orderData
-    );
-    return response as IBookedOrderFetched;
-  } catch (error) {
-    return rejectWithValue(
-      error instanceof Error ? error.message : "Failed to update booked order"
-    );
-  }
-});
+>(
+  "bookedOrders/update",
+  async ({ orderId, orderData }, { rejectWithValue }) => {
+    try {
+      const { databaseId, bookedOrdersCollectionId } = validateEnv();
 
+      // Update the order in Appwrite
+      const response = await databases.updateDocument(
+        databaseId,
+        bookedOrdersCollectionId,
+        orderId,
+        orderData
+      );
+
+      const updatedOrder = response as IBookedOrderFetched;
+
+      if (orderData.status && updatedOrder.phone) {
+        // Optional: skip for certain statuses
+        const skipSMSFor = ["cancelled"];
+        if (skipSMSFor.includes(orderData.status)) {
+          console.log(`Skipping SMS for status: ${orderData.status}`);
+        } else {
+          const formattedStatus = orderData.status
+            .replace(/_/g, " ")
+            .toLowerCase();
+
+          const customerMessage = `Hi! 🎉 Your order #${
+            updatedOrder.riderCode || updatedOrder.orderId.slice(-6)
+          } is now ${formattedStatus}. Thank you for choosing RideEx! 😋`;
+
+          const smsResult = await sendOrderFeedback({
+            number: formatNigerianPhone(updatedOrder.phone),
+            message: customerMessage,
+          });
+          if (!smsResult.success) {
+            console.warn(
+              "Customer SMS notification failed (non-blocking)",
+              smsResult
+            );
+          }
+        }
+      }
+
+      return updatedOrder;
+    } catch (error) {
+      return rejectWithValue(
+        error instanceof Error ? error.message : "Failed to update booked order"
+      );
+    }
+  }
+);
 // Update booked order rider code
 export const updateBookedOrderRiderCode = createAsyncThunk<
   IBookedOrderFetched,

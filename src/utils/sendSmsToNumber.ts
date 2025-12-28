@@ -14,8 +14,6 @@ export async function sendOrderFeedback({
 }) {
   try {
 
-    console.log("The message is :", message);
-
     const response = await fetch("/api/send-sms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -30,11 +28,14 @@ export async function sendOrderFeedback({
     const data = await response.json();
 
     if (!response.ok) {
-      toast.error(`SMS notification failed: ${data.error || response.status}`, {
-        duration: 8000,
-      });
+      console.error(
+        `SMS notification failed: ${data.error || response.status}`,
+        {
+          duration: 8000,
+        }
+      );
       console.warn("SMS failed but order processing continues:", data);
-      return { success: false }; // Non-blocking: return failure but don't throw
+      return { success: false };
     }
 
     return { success: true };

@@ -5,9 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { to, message, adminNumber, adminMessage } = body; // Cleaned up destructuring
+    const { to, message, adminNumber, adminMessage } = body;
 
-    console.log("The message received in api/send-sms is :", message);
     if (adminMessage) {
       console.log(
         "The admin message received in api/send-sms is :",
@@ -79,8 +78,6 @@ export async function POST(request: NextRequest) {
     const token = process.env.SMART_SMS_TOKEN;
     const senderId = process.env.SMART_SMS_SENDER_ID;
 
-    console.log("The sender id is :", senderId);
-
     if (!token || !senderId) {
       console.error("Missing env vars: SMART_SMS_TOKEN or SMART_SMS_SENDER_ID");
       return NextResponse.json(
@@ -125,11 +122,11 @@ async function sendSMSToNumber(
 ) {
   const formData = new FormData();
   formData.append("token", token);
-  formData.append("sender", senderId);
+  formData.append("sender", senderId || "RideEx");
   formData.append("to", to);
   formData.append("message", message);
-  formData.append("type", "0"); // Adjust if needed (0 = plain text)
-  formData.append("routing", "3"); // For DND in Nigeria
+  formData.append("type", "0");
+  formData.append("routing", "2");
 
   const response = await fetch(
     "https://app.smartsmssolutions.com/io/api/client/v1/sms/",
@@ -140,6 +137,7 @@ async function sendSMSToNumber(
   );
 
   const text = await response.text();
+
 
   const isSuccess =
     text.includes("OK") ||
