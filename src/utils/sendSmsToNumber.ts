@@ -2,55 +2,49 @@ import toast from "react-hot-toast";
 
 // utils/sendSmsToNumber.ts
 export async function sendOrderFeedback({
-  customer,
   number,
-  status,
   adminNumber,
-  orderId,
-  message, // Optional custom message
+  message,
+  adminMessage
 }: {
-  customer: string;
   number: string;
-  status: string;
   adminNumber?: string;
-  orderId: string;
-  message?: string; // Optional - if provided, uses this; else builds default
+  message: string;
+  adminMessage?:string;
 }) {
   try {
+
+    console.log("The message is :", message);
+
     const response = await fetch("/api/send-sms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         to: number,
-        message, // Send as-is (backend will handle if undefined)
+        message,
         adminNumber,
-        customer,
-        status,
-        orderId,
+        adminMessage,
       }),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      toast.error(`SMS notification failed: ${data.error || response.status}`,{duration:8000});
+      toast.error(`SMS notification failed: ${data.error || response.status}`, {
+        duration: 8000,
+      });
       console.warn("SMS failed but order processing continues:", data);
       return { success: false }; // Non-blocking: return failure but don't throw
     }
 
-    console.log("SMS sent successfully:", data);
-    return { success: true }; // Success indicator
+    return { success: true };
   } catch (error) {
     console.error("Error sending SMS:", error);
-    toast.error(
-      `SMS notification failed: ${(error as Error).message}`
-    );
-    return { success: false }; // Non-blocking: continue order flow
+    toast.error(`SMS notification failed: ${(error as Error).message}`);
+    return { success: false };
   }
 }
 
-
-// Handles formats like: +234xxxxxxxxx, 234xxxxxxxxx, 0xxxxxxxxx
 // Assumes input is a valid Nigerian mobile number (10 digits after country code)
 export function formatNigerianPhone(phone: string): string {
   // Remove all non-digits

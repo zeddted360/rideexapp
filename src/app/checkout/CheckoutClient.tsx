@@ -562,6 +562,7 @@ export default function CheckoutClient() {
     setIsPlacingOrder(true);
     try {
       const orderId = ID.unique();
+      const riderCode = orderId.slice(-4).toUpperCase();
 
       const structuredItems = orders.map((cartItem: ICartItemFetched) =>
         JSON.stringify({
@@ -588,6 +589,7 @@ export default function CheckoutClient() {
 
       const order = {
         orderId,
+        riderCode,
         itemIds: orders.map((item: ICartItemFetched) => item.itemId),
         items: structuredItems,
         paymentMethod,
@@ -634,13 +636,29 @@ export default function CheckoutClient() {
         )
       );
       dispatch(resetOrders());
+      // message to be sent to the customer
+      const customerMessage = `Your order #${riderCode} is confirmed! 😋 It's now ${placedOrder.status
+        .replace(/_/g, " ")
+        .toLowerCase()}. View live updates: ${
+        window.location.origin
+      }/myorders/${orderId}`;
+
+      // mssage to be sent to the admin
+      const adminMessage = `Admin Alert: Order #${riderCode} for ${
+        user.fullName || "Customer"
+      } (${formatNigerianPhone(phoneNumber)}) is now ${placedOrder.status
+        .replace(/_/g, " ")
+        .toLowerCase()}.`;
 
       const smsResult = await sendOrderFeedback({
-        customer: user.fullName || "Guest_user",
         number: formatNigerianPhone(phoneNumber),
-        orderId: placedOrder.riderCode || "",
-        status: placedOrder.status,
+        message: customerMessage,
+        adminNumber: formatNigerianPhone(
+          process.env.NEXT_PUBLIC_ADMIN_PHONE_NUMBER || "08023353418"
+        ),
+        adminMessage: adminMessage,
       });
+
       if (!smsResult.success) {
         console.warn("SMS failed, but order is confirmed");
       }

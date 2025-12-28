@@ -5,41 +5,52 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      to,
-      message,
-      adminNumber,
-      customer,
-      status,
-      orderId,
-      customMessage,
-    } = body;
+    const { to, message, adminNumber, adminMessage } = body; // Cleaned up destructuring
+
+    console.log("The message received in api/send-sms is :", message);
+    if (adminMessage) {
+      console.log(
+        "The admin message received in api/send-sms is :",
+        adminMessage
+      );
+    }
 
     // Validate required fields
-    if (!to) {
+    if (!to || !message) {
       return NextResponse.json(
-        { error: "Missing required field: to (phone number)" },
+        { error: "Missing required fields: to (phone number) and message" },
         { status: 400 }
       );
     }
 
-    // Build message if not provided (use customMessage if available, else default)
-    const finalMessage =
-      message ||
-      customMessage ||
-      `Dear ${customer || "Customer"}, your order #${orderId} is now ${status
-        .replace(/_/g, " ")
-        .toLowerCase()}. Thank you for choosing us!`;
-
-    if (!finalMessage || finalMessage.length > 160) {
-      // SMS limit check
+    if (message.length > 160 || message.length === 0) {
       return NextResponse.json(
-        { error: "Invalid or too long message (max 160 chars)" },
+        { error: "Invalid message length (1-160 chars)" },
         { status: 400 }
       );
     }
 
-    // Basic phone validation (Nigerian format)
+    if (adminNumber && !adminMessage) {
+      return NextResponse.json(
+        {
+          error:
+            "Missing required field: adminMessage (when adminNumber is provided)",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      adminMessage &&
+      (adminMessage.length > 160 || adminMessage.length === 0)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid adminMessage length (1-160 chars)" },
+        { status: 400 }
+      );
+    }
+
+    // Basic phone validation (Nigerian format) for to
     if (!/^(0|\+234)[789]\d{9}$/.test(to.replace("+", ""))) {
       return NextResponse.json(
         {
@@ -50,9 +61,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Add validation for adminNumber if provided
+    if (
+      adminNumber &&
+      !/^(0|\+234)[789]\d{9}$/.test(adminNumber.replace("+", ""))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid admin phone number format (use Nigerian number, e.g., 08012345678)",
+        },
+        { status: 400 }
+      );
+    }
+
     // Get env vars (server-side only)
     const token = process.env.SMART_SMS_TOKEN;
     const senderId = process.env.SMART_SMS_SENDER_ID;
+
+    console.log("The sender id is :", senderId);
 
     if (!token || !senderId) {
       console.error("Missing env vars: SMART_SMS_TOKEN or SMART_SMS_SENDER_ID");
@@ -62,15 +89,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Send to customer
-    await sendSMSToNumber(formatNigerianPhone(to), finalMessage, token, senderId);
+    // Send to customer (format to)
+    await sendSMSToNumber(formatNigerianPhone(to), message, token, senderId);
 
-    // Send to admin if provided
-    if (adminNumber) {
-      const adminMessage = `Admin Alert: Order #${orderId} for ${
-        customer || "Customer"
-      } (${to}) is now ${status.replace(/_/g, " ").toLowerCase()}.`;
-      await sendSMSToNumber(adminNumber, adminMessage, token, senderId);
+    // Send to admin if provided (format adminNumber)
+    if (adminNumber && adminMessage) {
+      await sendSMSToNumber(
+        formatNigerianPhone(adminNumber),
+        adminMessage,
+        token,
+        senderId
+      );
     }
 
     return NextResponse.json({
@@ -87,7 +116,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Internal helper
+// Internal helper (unchanged)
 async function sendSMSToNumber(
   to: string,
   message: string,
@@ -110,21 +139,33 @@ async function sendSMSToNumber(
     }
   );
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  const text = await response.text();
+
+  const isSuccess =
+    text.includes("OK") ||
+    text.toLowerCase().includes("successful") ||
+    text.toLowerCase().includes("queued") ||
+    text.includes("Message sent") ||
+    (text.includes("status") && text.includes('"OK"'));
+
+  if (response.ok && isSuccess) {
+    return { success: true, raw: text };
   }
 
-  const data = await response.text();
-  let parsedData;
+  // Try to parse JSON only if it looks like JSON
+  let data;
   try {
-    parsedData = JSON.parse(data);
+    data = JSON.parse(text);
   } catch {
-    parsedData = { state: "success" }; // Fallback if not JSON
+    // not json → probably plain text error
+    throw new Error(`SMS API failed (plain text): ${text.slice(0, 120)}`);
   }
 
-  if (parsedData.state !== "success") {
-    throw new Error(parsedData.Message || "Unknown SMS API error");
+  // JSON error cases
+  if (data?.status?.toUpperCase() === "ERROR" || data?.error) {
+    throw new Error(data.message || data.error || "SmartSMS rejected request");
   }
 
-  return parsedData;
+  // Last resort fallback (should be rare)
+  throw new Error(`Unexpected SMS response format: ${text.slice(0, 120)}`);
 }
