@@ -16,12 +16,11 @@ interface EnvConfig {
   popularBucketId: string;
   popularItemsCollectionId: string;
   userCollectionId: string;
-  googleMapsApiKey: string; // Added for Google Maps
+  googleMapsApiKey: string;
   bookedOrdersCollectionId: string;
   mapBoxAccessToken: string;
   notificationCollectionId: string;
   payStackPublickKey: string;
-  guestUserCollectionId: string;
   newsLetterCollectionId: string;
   vendorsCollectionId: string;
   ridersCollectionId: string;
@@ -67,14 +66,10 @@ export function validateEnv(): EnvConfig {
     notificationCollectionId:
       process.env.NEXT_PUBLIC_NOTIFICATION_COLLECTION_ID,
     payStackPublicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
-    guestUserCollectionId:
-      process.env.NEXT_PUBLIC_APPWRITE_GUEST_USER_COLLECTION_ID,
     newsLetterCollectionId:
       process.env.NEXT_PUBLIC_APPWRITE_NEWSLETTER_COLLECTION_ID,
     vendorsCollectionId: process.env.NEXT_PUBLIC_VENDORS_COLLECTION_ID,
     ridersCollectionId: process.env.NEXT_PUBLIC_RIDERS_COLLECTION_ID,
-    driversLicenceBucketId:
-      process.env.NEXT_PUBLIC_APPWRITE_DRIVERS_LICENCE_COLLECTION_ID,
     promoOfferCollectionId:
       process.env.NEXT_PUBLIC_APPWRITE_PROMO_OFFER_COLLECTION_ID,
     promoOfferBucketId: process.env.NEXT_PUBLIC_APPWRITE_PROMO_OFFER_BUCKET_ID,
@@ -93,7 +88,7 @@ export function validateEnv(): EnvConfig {
     packsCollectionId: process.env.NEXT_PUBLIC_PACK_COLLECTION_ID,
     adminPromotionCodesCollectionId:
       process.env.NEXT_PUBLIC_APPWRITE_ADMIN_PROMOTION_COLLECTION!,
-    mapSubscriptionsCollectionId:process.env.NEXT_PUBLIC_MAP_SUB_COLLECTION_ID,
+    mapSubscriptionsCollectionId: process.env.NEXT_PUBLIC_MAP_SUB_COLLECTION_ID,
   };
 
   // Check for undefined environment variables
@@ -128,11 +123,9 @@ export function validateEnv(): EnvConfig {
     mapBoxAccessToken: requiredEnvVars.mapBoxAccessToken!,
     notificationCollectionId: requiredEnvVars.notificationCollectionId!,
     payStackPublickKey: requiredEnvVars.payStackPublicKey!,
-    guestUserCollectionId: requiredEnvVars.guestUserCollectionId!,
     newsLetterCollectionId: requiredEnvVars.newsLetterCollectionId!,
     vendorsCollectionId: requiredEnvVars.vendorsCollectionId!,
     ridersCollectionId: requiredEnvVars.ridersCollectionId!,
-    driversLicenceBucketId: requiredEnvVars.driversLicenceBucketId!,
     promoOfferCollectionId: requiredEnvVars.promoOfferCollectionId!,
     promoOfferBucketId: requiredEnvVars.promoOfferBucketId!,
     discountsCollectionId: requiredEnvVars.discountsCollectionId!,
@@ -147,7 +140,8 @@ export function validateEnv(): EnvConfig {
     packsCollectionId: requiredEnvVars.packsCollectionId!,
     adminPromotionCodesCollectionId:
       requiredEnvVars.adminPromotionCodesCollectionId!,
-    mapSubscriptionsCollectionId:requiredEnvVars.mapSubscriptionsCollectionId!,
+    mapSubscriptionsCollectionId: requiredEnvVars.mapSubscriptionsCollectionId!,
+    driversLicenceBucketId: process.env.NEXT_PUBLIC_APPWRITE_DRIVERS_LICENCE_BUCKET_ID!,
   };
 }
 
@@ -171,7 +165,7 @@ export const config = {
   orderId: env.orderId,
   featuredId: env.featuredId,
   featuredBucketId: env.featuredBucketId,
-  googleMapsApiKey: env.googleMapsApiKey, // Added for Google Maps
+  googleMapsApiKey: env.googleMapsApiKey,
 };
 
 const fileUrl = (bucketId: string, fileId: string) =>
@@ -180,5 +174,3 @@ const fileUrl = (bucketId: string, fileId: string) =>
   }&mode=admin`;
 
 export { databases, storage, account, fileUrl, client,messaging };
-
-// https://messaging.vtpass.com/api/sms/sendsms?sender={sender}&recipient={recipient}&message={message}&responsetype={responsetype}
