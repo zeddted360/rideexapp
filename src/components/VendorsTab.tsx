@@ -22,12 +22,17 @@ interface VendorsTabProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
   statusFilter: "pending" | "approved" | "rejected" | "all";
-  setStatusFilter: (status: "pending" | "approved" | "rejected" | "all") => void;
+  setStatusFilter: (
+    status: "pending" | "approved" | "rejected" | "all"
+  ) => void;
   currentPage: number;
   setCurrentPage: (page: number) => void;
   filteredVendors: IVendorFetched[];
   vendorsPerPage: number;
-  handleVendorStatusChange: (vendorId: string, newStatus: "pending" | "approved" | "rejected") => Promise<void>;
+  handleVendorStatusChange: (
+    vendorId: string,
+    newStatus: "pending" | "approved" | "rejected"
+  ) => Promise<void>;
   handleVendorDelete: (vendorId: string) => Promise<void>;
   VENDOR_STATUSES: string[];
 }
@@ -50,7 +55,7 @@ export default function VendorsTab({
 }: VendorsTabProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [vendorToDelete, setVendorToDelete] = useState<string | null>(null);
-  const [isDeletingVendor,setIsDeletingVendor] = useState<boolean>(false);
+  const [isDeletingVendor, setIsDeletingVendor] = useState<boolean>(false);
 
   const getStatusBadge = (status: string) => {
     const baseClasses =
@@ -67,7 +72,10 @@ export default function VendorsTab({
     }
   };
 
-  const handleStatusChange = (vendorId: string, e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleStatusChange = (
+    vendorId: string,
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
     const newStatus = e.target.value as "pending" | "approved" | "rejected";
     handleVendorStatusChange(vendorId, newStatus);
   };
@@ -78,11 +86,11 @@ export default function VendorsTab({
   };
 
   const confirmDelete = async () => {
-      setIsDeletingVendor(true)
+    setIsDeletingVendor(true);
     if (vendorToDelete) {
       await handleVendorDelete(vendorToDelete);
     }
-      setIsDeletingVendor(false)
+    setIsDeletingVendor(false);
     setShowDeleteModal(false);
     setVendorToDelete(null);
   };
@@ -265,10 +273,7 @@ export default function VendorsTab({
                   ))
                 ) : (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="py-8 text-center text-gray-500"
-                    >
+                    <td colSpan={6} className="py-8 text-center text-gray-500">
                       No vendors found.
                     </td>
                   </tr>
@@ -293,9 +298,7 @@ export default function VendorsTab({
                       <p className="font-medium text-gray-900 dark:text-gray-100">
                         {vendor.fullName}
                       </p>
-                      <p className="text-sm text-gray-500">
-                        {vendor.email}
-                      </p>
+                      <p className="text-sm text-gray-500">{vendor.email}</p>
                     </div>
                   </div>
                   <div className="space-y-2 mb-3">
@@ -313,9 +316,7 @@ export default function VendorsTab({
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-gray-500" />
-                      <p className="text-sm text-gray-500">
-                        {vendor.location}
-                      </p>
+                      <p className="text-sm text-gray-500">{vendor.location}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-500" />
@@ -415,7 +416,8 @@ export default function VendorsTab({
                   Confirm Delete
                 </h3>
                 <p className="text-gray-700 dark:text-gray-300 mb-6 text-sm leading-relaxed">
-                  Are you sure you want to delete this vendor? This action cannot be undone.
+                  Are you sure you want to delete this vendor? This action
+                  cannot be undone.
                 </p>
                 <div className="flex gap-3 justify-end">
                   <Button
@@ -428,7 +430,11 @@ export default function VendorsTab({
                     onClick={confirmDelete}
                     className="flex justify-center items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors duration-200"
                   >
-                   {isDeletingVendor ? <Loader2 className="animate-spin"/>: " Delete"}
+                    {isDeletingVendor ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      "Delete"
+                    )}
                   </Button>
                 </div>
               </motion.div>

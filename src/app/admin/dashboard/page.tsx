@@ -419,7 +419,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // User delete handler
+
   const handleUserDelete = async (userId: string) => {
     try {
       const user = users.find((u) => u.$id === userId);
@@ -427,16 +427,10 @@ export default function AdminDashboard() {
         toast.error("User not found");
         return;
       }
-      if (
-        confirm(
-          `Are you sure you want to delete user ${
-            user.fullName || user.email || "Unknown"
-          }? This action is irreversible.`
-        )
-      ) {
-        await dispatch(deleteUserAsync(userId)).unwrap();
-        toast.success("User deleted successfully");
-      }
+
+      // The confirmDelete in UsersTab will call this
+      await dispatch(deleteUserAsync(userId)).unwrap();
+      toast.success("User deleted successfully");
     } catch (error: any) {
       console.error("Error deleting user:", error);
       toast.error(error.message || "Failed to delete user");

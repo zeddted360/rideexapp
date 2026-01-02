@@ -66,18 +66,40 @@ export const unblockUserAsync = createAsyncThunk(
 );
 
 // Async thunk to delete a user
+// export const deleteUserAsync = createAsyncThunk(
+//   "users/deleteUserAsync",
+//   async (userId: string, { rejectWithValue }) => {
+//     try {
+//       const { databaseId, userCollectionId } = validateEnv();
+//       await databases.deleteDocument(databaseId, userCollectionId, userId);
+//       return userId;
+//     } catch (error: any) {
+//       return rejectWithValue(error.message);
+//     }
+//   }
+// );
+
 export const deleteUserAsync = createAsyncThunk(
-  "users/deleteUserAsync",
+  "users/deleteUser",
   async (userId: string, { rejectWithValue }) => {
     try {
-      const { databaseId, userCollectionId } = validateEnv();
-      await databases.deleteDocument(databaseId, userCollectionId, userId);
-      return userId;
+      const response = await fetch(`/api/users/delete/${userId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete user");
+      }
+
+      const data = await response.json();
+      return { userId, message: data.message };
     } catch (error: any) {
-      return rejectWithValue(error.message);
+      return rejectWithValue(error.message || "Failed to delete user");
     }
   }
 );
+
 
 // Async thunk to update user admin status
 export const updateUserAdminAsync = createAsyncThunk(
@@ -153,13 +175,17 @@ const usersSlice = createSlice({
       // Delete user
       .addCase(
         deleteUserAsync.fulfilled,
-        (state, action: PayloadAction<string>) => {
+        (state, action: PayloadAction<{ userId: string; message: any }>) => {
           state.users = state.users.filter(
-            (user) => user.$id !== action.payload
+            (user) => user.$id !== action.payload.userId
           );
         }
       )
+      .addCase(deleteUserAsync.pending, (state) => {
+        state.loading = "pending";
+      })
       .addCase(deleteUserAsync.rejected, (state, action) => {
+        state.loading = "failed";
         state.error = action.payload as string;
       })
       .addCase(updateUserAdminAsync.fulfilled, (state, action) => {

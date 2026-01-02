@@ -55,21 +55,29 @@ export const updateVendorStatusAsync = createAsyncThunk(
   }
 );
 
+
+
 export const deleteVendorAsync = createAsyncThunk(
   "vendors/delete",
-  async (vendorId: string) => {
+  async (vendorId: string, { rejectWithValue }) => {
     try {
-      const { databaseId, vendorsCollectionId, userCollectionId } = validateEnv();
-      // Delete vendor document
-      await databases.deleteDocument(databaseId, vendorsCollectionId, vendorId);
-      // Delete user profile document (user.$id === vendorId)
-      await databases.deleteDocument(databaseId, userCollectionId, vendorId);
+      const response = await fetch(`/api/vendors/delete/${vendorId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete vendor");
+      }
+
       return vendorId;
     } catch (error: any) {
-      throw new Error(error.message || "Failed to delete vendor");
+      return rejectWithValue(error.message || "Failed to delete vendor");
     }
   }
 );
+
+
 
 interface VendorState {
   vendors: IVendorFetched[];
