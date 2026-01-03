@@ -1,17 +1,32 @@
-// components/ForgotPasswordButton.tsx
+// components/login/ForgotPasswordButton.tsx (update to show loading)
+import { Loader2 } from "lucide-react";
+import { Button } from "../ui/button";
+
 interface ForgotPasswordButtonProps {
   onClick: () => void;
+  isResetting?: boolean; // Add prop
 }
 
-const ForgotPasswordButton = ({ onClick }: ForgotPasswordButtonProps) => {
+const ForgotPasswordButton = ({
+  onClick,
+  isResetting,
+}: ForgotPasswordButtonProps) => {
   return (
-    <button
-      type="button"
+    <Button
+      variant="link"
       onClick={onClick}
-      className="text-sm text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 font-medium"
+      disabled={isResetting}
+      className="text-orange-600 p-0 h-auto"
     >
-      Forgot Password?
-    </button>
+      {isResetting ? (
+        <>
+          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+          Sending...
+        </>
+      ) : (
+        "Forgot Password?"
+      )}
+    </Button>
   );
 };
 

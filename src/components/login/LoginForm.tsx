@@ -1,6 +1,4 @@
-// components/LoginForm.tsx
-"use client";
-import { useForm } from "react-hook-form";
+// components/login/LoginForm.tsx
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoginFormData, loginSchema } from "@/utils/authSchema";
 import { Button } from "@/components/ui/button";
@@ -15,28 +13,40 @@ interface LoginFormProps {
   loading: string | null;
   errors: { [key: string]: string | undefined };
   fieldErrors: { [key: string]: string };
+  emailRef?: React.RefObject<HTMLInputElement | null>; // allow nullable ref
 }
 
-const LoginForm = ({ onSubmit, loading, errors, fieldErrors }: LoginFormProps) => {
+const LoginForm = ({
+  onSubmit,
+  loading,
+  errors,
+  fieldErrors,
+  emailRef,
+}: LoginFormProps) => {
   const [showPassword, setShowPassword] = useState(false);
-  const {
-    register,
-    handleSubmit,
-    formState: { errors: formErrors },
-    setValue,
-    watch,
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      rememberMe: false,
-    },
-    mode: "onChange",
-  });
+
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const emailEl = form.elements.namedItem("email") as HTMLInputElement | null;
+    const passwordEl = form.elements.namedItem(
+      "password"
+    ) as HTMLInputElement | null;
+    const rememberEl = form.elements.namedItem(
+      "rememberMe"
+    ) as HTMLInputElement | null;
+
+    const data: LoginFormData = {
+      email: emailEl?.value ?? "",
+      password: passwordEl?.value ?? "",
+      rememberMe: rememberEl?.checked ?? false,
+    };
+
+    onSubmit(data);
+  };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleFormSubmit} className="space-y-6">
       <div className="space-y-1">
         <Label htmlFor="email" className="text-sm font-medium">
           Email
@@ -45,22 +55,22 @@ const LoginForm = ({ onSubmit, loading, errors, fieldErrors }: LoginFormProps) =
           <Input
             id="email"
             type="email"
-            {...register("email")}
+            ref={emailRef} // Attach ref here (chains with register if using in parent, but since no register, direct ref)
             className={`h-12 pr-10 ${
-              formErrors.email || fieldErrors.email
+              fieldErrors.email
                 ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                 : ""
             }`}
             placeholder="Enter your email"
           />
-          {(formErrors.email || fieldErrors.email) && (
+          {fieldErrors.email && (
             <AlertCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-red-500" />
           )}
         </div>
-        {(formErrors.email || fieldErrors.email) && (
+        {fieldErrors.email && (
           <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
-            {formErrors.email?.message || fieldErrors.email}
+            {fieldErrors.email}
           </p>
         )}
       </div>
@@ -73,16 +83,15 @@ const LoginForm = ({ onSubmit, loading, errors, fieldErrors }: LoginFormProps) =
           <Input
             id="password"
             type={showPassword ? "text" : "password"}
-            {...register("password")}
             className={`h-12 pr-20 ${
-              formErrors.password || fieldErrors.password
+              fieldErrors.password
                 ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                 : ""
             }`}
             placeholder="Enter your password"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {(formErrors.password || fieldErrors.password) && (
+            {fieldErrors.password && (
               <AlertCircle className="w-4 h-4 text-red-500" />
             )}
             <button
@@ -99,10 +108,10 @@ const LoginForm = ({ onSubmit, loading, errors, fieldErrors }: LoginFormProps) =
             </button>
           </div>
         </div>
-        {(formErrors.password || fieldErrors.password) && (
+        {fieldErrors.password && (
           <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
-            {formErrors.password?.message || fieldErrors.password}
+            {fieldErrors.password}
           </p>
         )}
       </div>
@@ -111,8 +120,7 @@ const LoginForm = ({ onSubmit, loading, errors, fieldErrors }: LoginFormProps) =
         <div className="flex items-center space-x-2">
           <Checkbox
             id="rememberMe"
-            checked={watch("rememberMe")}
-            onCheckedChange={(checked) => setValue("rememberMe", checked as boolean)}
+            // Note: Without register, handle manually if needed
           />
           <Label
             htmlFor="rememberMe"

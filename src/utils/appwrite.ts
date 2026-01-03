@@ -39,6 +39,7 @@ interface EnvConfig {
   packsCollectionId: string;
   adminPromotionCodesCollectionId: string;
   mapSubscriptionsCollectionId: string;
+  recoveryTokensCollectionId: string;
 }
 
 // Validate environment variables
@@ -89,6 +90,7 @@ export function validateEnv(): EnvConfig {
     adminPromotionCodesCollectionId:
       process.env.NEXT_PUBLIC_APPWRITE_ADMIN_PROMOTION_COLLECTION!,
     mapSubscriptionsCollectionId: process.env.NEXT_PUBLIC_MAP_SUB_COLLECTION_ID,
+    recoveryTokensCollectionId: process.env.NEXT_PUBLIC_APPWRITE_RECOVERY_TOKENS_COLLECTION_ID,
   };
 
   // Check for undefined environment variables
@@ -142,6 +144,7 @@ export function validateEnv(): EnvConfig {
       requiredEnvVars.adminPromotionCodesCollectionId!,
     mapSubscriptionsCollectionId: requiredEnvVars.mapSubscriptionsCollectionId!,
     driversLicenceBucketId: process.env.NEXT_PUBLIC_APPWRITE_DRIVERS_LICENCE_BUCKET_ID!,
+    recoveryTokensCollectionId: requiredEnvVars.recoveryTokensCollectionId!,
   };
 }
 

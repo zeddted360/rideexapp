@@ -15,6 +15,7 @@ interface ServerEnvConfig {
   databaseId: string;
   vendorsCollectionId: string;
   userCollectionId: string;
+  recoveryTokensCollectionId: string;
 }
 
 // Validate only the required server-side environment variables
@@ -26,6 +27,8 @@ export function validateServerEnv(): ServerEnvConfig {
     databaseId: process.env.APPWRITE_DATABASE_ID,
     vendorsCollectionId: process.env.APPWRITE_VENDORS_COLLECTION_ID,
     userCollectionId: process.env.APPWRITE_USERS_COLLECTION_ID,
+    recoveryTokensCollectionId:
+      process.env.APPWRITE_RECOVERY_TOKENS_COLLECTION_ID,
   };
 
   const missingVars = Object.entries(requiredEnvVars)
@@ -62,4 +65,5 @@ export const serverConfig = {
   databaseId: env.databaseId,
   vendorsCollectionId: env.vendorsCollectionId,
   userCollectionId: env.userCollectionId,
+  recoveryTokensCollectionId: env.recoveryTokensCollectionId,
 };

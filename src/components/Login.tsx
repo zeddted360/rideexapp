@@ -14,7 +14,7 @@ import Link from "next/link";
 import { account, databases, validateEnv } from "@/utils/appwrite";
 import { LoginFormData } from "@/utils/authSchema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEffect, useState, useRef } from "react"; // Added useRef
+import { useEffect, useState, useRef } from "react"; // useRef already there
 import { Query } from "appwrite";
 import { useAuth } from "@/context/authContext";
 import { IUserFectched } from "../../types/types";
@@ -43,8 +43,12 @@ const Login = () => {
   const [isResendingCode, setIsResendingCode] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [tempPassword, setTempPassword] = useState("");
-  const [verificationError, setVerificationError] = useState<string | null>(null);
-  const hasRedirected = useRef(false); // Added to track redirect status
+  const [verificationError, setVerificationError] = useState<string | null>(
+    null
+  );
+  const hasRedirected = useRef(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     // Prevent redirect if already redirected or verification modal is open
@@ -62,7 +66,10 @@ const Login = () => {
 
   const getFriendlyErrorMessage = (error: string): string => {
     const errorLower = error.toLowerCase();
-    if (errorLower.includes("invalid credentials") || errorLower.includes("user not found")) {
+    if (
+      errorLower.includes("invalid credentials") ||
+      errorLower.includes("user not found")
+    ) {
       return "Invalid email or password. Please check your credentials.";
     }
     if (errorLower.includes("network") || errorLower.includes("fetch")) {
@@ -93,7 +100,7 @@ const Login = () => {
           setAdminEmail(data.email);
           setTempPassword(data.password);
           setShowVerificationModal(true);
-          hasRedirected.current = false; // Reset redirect flag for admin flow
+          hasRedirected.current = false;
           return;
         } else {
           dispatch(getCurrentUserAsync());
@@ -110,9 +117,15 @@ const Login = () => {
         ) {
           setNetworkError(true);
         } else if (errorMessage.toLowerCase().includes("email")) {
-          setFieldErrors((prev) => ({ ...prev, email: "Invalid email address" }));
+          setFieldErrors((prev) => ({
+            ...prev,
+            email: "Invalid email address",
+          }));
         } else if (errorMessage.toLowerCase().includes("password")) {
-          setFieldErrors((prev) => ({ ...prev, password: "Incorrect password" }));
+          setFieldErrors((prev) => ({
+            ...prev,
+            password: "Incorrect password",
+          }));
         } else if (
           errorMessage.toLowerCase().includes("user not found") ||
           errorMessage.toLowerCase().includes("invalid credentials")
@@ -157,9 +170,11 @@ const Login = () => {
       } else if (!formattedPhone.startsWith("+234")) {
         formattedPhone = "+234" + formattedPhone;
       }
-      const response = await databases.listDocuments(databaseId, userCollectionId, [
-        Query.equal("phone", formattedPhone),
-      ]);
+      const response = await databases.listDocuments(
+        databaseId,
+        userCollectionId,
+        [Query.equal("phone", formattedPhone)]
+      );
       if (response.documents.length > 0) {
         return response.documents[0];
       }
@@ -185,22 +200,29 @@ const Login = () => {
     }
     const regex = /^\+234\d{10}$/;
     if (!regex.test(formattedPhone)) {
-      toast.error("Please enter a valid Nigerian phone number (e.g., 08012345678)");
+      toast.error(
+        "Please enter a valid Nigerian phone number (e.g., 08012345678)"
+      );
       return;
     }
     setIsCheckingPhone(true);
     try {
-      const existingUserData = await checkPhoneInAppwriteForGuestUser(formattedPhone);
+      const existingUserData = await checkPhoneInAppwriteForGuestUser(
+        formattedPhone
+      );
       if (existingUserData) {
         setExistingUser(existingUserData as unknown as IUserFectched);
-        toast.success(`Welcome back, ${existingUserData.name || existingUserData.username}!`);
+        toast.success(
+          `Welcome back, ${existingUserData.name || existingUserData.username}!`
+        );
       } else {
         setExistingUser(null);
         toast.success("Welcome! You're browsing as a guest.");
       }
       const guestUser = {
         userId: `guest_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        username: existingUserData?.name || existingUserData?.username || "Guest User",
+        username:
+          existingUserData?.name || existingUserData?.username || "Guest User",
         email: `guest_${Date.now()}@guest.com`,
         role: "user",
         phoneNumber: formattedPhone,
@@ -234,13 +256,16 @@ const Login = () => {
       }
     } catch (error) {
       console.error("Guest login error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
       if (
         errorMessage.toLowerCase().includes("network") ||
         errorMessage.toLowerCase().includes("fetch") ||
         errorMessage.toLowerCase().includes("connection")
       ) {
-        toast.error("Network error. Please check your connection and try again.");
+        toast.error(
+          "Network error. Please check your connection and try again."
+        );
       } else {
         toast.error("Failed to create guest session. Please try again.");
       }
@@ -250,24 +275,42 @@ const Login = () => {
   };
 
   const handleForgotPassword = async () => {
-    const email = "";
+    const email = emailRef.current?.value?.trim();
+
     if (!email) {
       toast.error("Please enter your email to reset password");
       return;
     }
+
+    setIsResetting(true); // Start loading UX
+
     try {
-      await account.createRecovery(email, "http://localhost:3000/reset-password");
-      toast.success("Password reset link sent to your email");
-    } catch (error) {
-      toast.error(
-        `Failed to send reset link: ${error instanceof Error ? error.message : "Unknown error"}`
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to send reset link");
+      }
+
+      toast.success(
+        "Password reset link sent to your email if the account exists"
       );
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send reset link");
+    } finally {
+      setIsResetting(false); // End loading
     }
   };
 
   const handleCodeVerification = async () => {
     if (!tempPassword) {
-      setVerificationError("Password not available. Please try logging in again.");
+      setVerificationError(
+        "Password not available. Please try logging in again."
+      );
       toast.error("Password not available. Please try logging in again.");
       return;
     }
@@ -278,7 +321,7 @@ const Login = () => {
       const response = await databases.getDocument<IUserFectched>(
         databaseId,
         userCollectionId,
-        user?.userId || "",
+        user?.userId || ""
       );
       if (!response) {
         setVerificationError("User not found.");
@@ -288,15 +331,21 @@ const Login = () => {
       }
       const userDoc = response;
       const storedCode = userDoc.verificationCode;
-      const codeExpiration = userDoc.codeExpiration ? new Date(userDoc.codeExpiration) : null;
+      const codeExpiration = userDoc.codeExpiration
+        ? new Date(userDoc.codeExpiration)
+        : null;
       if (!storedCode || !codeExpiration) {
-        setVerificationError("No verification code found. Please request a new one.");
+        setVerificationError(
+          "No verification code found. Please request a new one."
+        );
         toast.error("No verification code found. Please request a new one.");
         setIsVerifyingCode(false);
         return;
       }
       if (codeExpiration < new Date()) {
-        setVerificationError("Verification code has expired. Please request a new one.");
+        setVerificationError(
+          "Verification code has expired. Please request a new one."
+        );
         toast.error("Verification code has expired. Please request a new one.");
         setIsVerifyingCode(false);
         return;
@@ -308,10 +357,15 @@ const Login = () => {
         return;
       }
       await account.createEmailPasswordSession(adminEmail, tempPassword);
-      await databases.updateDocument(databaseId, userCollectionId, userDoc.$id, {
-        verificationCode: null,
-        codeExpiration: null,
-      });
+      await databases.updateDocument(
+        databaseId,
+        userCollectionId,
+        userDoc.$id,
+        {
+          verificationCode: null,
+          codeExpiration: null,
+        }
+      );
       dispatch(getCurrentUserAsync());
       toast.success("Admin login successful!", { icon: "🔓" });
       await new Promise((resolve) => setTimeout(resolve, 4000));
@@ -323,7 +377,8 @@ const Login = () => {
       // Redirect handled by useEffect
     } catch (error) {
       console.error("Error completing admin login:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       setVerificationError("Failed to complete login. Please try again.");
       toast.error(`Login failed: ${getFriendlyErrorMessage(errorMessage)}`);
     } finally {
@@ -336,11 +391,15 @@ const Login = () => {
     setVerificationError(null);
     try {
       const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const codeExpiration = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const codeExpiration = new Date(
+        Date.now() + 10 * 60 * 1000
+      ).toISOString();
       const { databaseId, userCollectionId } = validateEnv();
-      const response = await databases.listDocuments(databaseId, userCollectionId, [
-        Query.equal("email", adminEmail),
-      ]);
+      const response = await databases.listDocuments(
+        databaseId,
+        userCollectionId,
+        [Query.equal("email", adminEmail)]
+      );
       if (response.documents.length === 0) {
         setVerificationError("User not found.");
         toast.error("User not found.");
@@ -348,10 +407,15 @@ const Login = () => {
         return;
       }
       const userDoc = response.documents[0] as IUserFectched;
-      await databases.updateDocument(databaseId, userCollectionId, userDoc.$id, {
-        verificationCode: newCode,
-        codeExpiration,
-      });
+      await databases.updateDocument(
+        databaseId,
+        userCollectionId,
+        userDoc.$id,
+        {
+          verificationCode: newCode,
+          codeExpiration,
+        }
+      );
       const apiResponse = await fetch("/api/admin/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -391,9 +455,13 @@ const Login = () => {
             loading={loading}
             errors={{}}
             fieldErrors={fieldErrors}
+            emailRef={emailRef} // Pass ref to LoginForm
           />
           <div className="flex items-center justify-end mt-4">
-            <ForgotPasswordButton onClick={handleForgotPassword} />
+            <ForgotPasswordButton
+              onClick={handleForgotPassword}
+              isResetting={isResetting}
+            />
           </div>
           <ErrorDisplay
             networkError={networkError}
