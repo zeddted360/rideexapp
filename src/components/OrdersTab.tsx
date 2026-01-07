@@ -239,7 +239,6 @@ export default function OrdersTab({
   }>({});
   const [fetchingDistances, setFetchingDistances] = useState(false);
 
-
   useEffect(() => {
     dispatch(listAsyncFeaturedItems());
     dispatch(listAsyncMenusItem());
@@ -258,7 +257,7 @@ export default function OrdersTab({
       ...new Set(
         orders
           .map((order) => order.customerId)
-          .filter((id) => id && !customerNames[id]) // only missing ones
+          .filter((id) => id && !customerNames[id])
       ),
     ];
 
@@ -303,7 +302,7 @@ export default function OrdersTab({
     };
 
     fetchMissingCustomerNames();
-  }, [orders, customerNames]); // Depend on both
+  }, [orders, customerNames]);
 
   const findItemById = (id: string): ItemWithBucket => {
     let item:
@@ -348,7 +347,6 @@ export default function OrdersTab({
 
   const { restaurants: restaurantDataMap, loading: restaurantsLoading } =
     useRestaurantsByIds(restaurantIdsForCurrentOrder);
-
 
   useEffect(() => {
     if (selectedOrder && selectedOrder.items) {
@@ -512,6 +510,162 @@ export default function OrdersTab({
     }
   };
 
+  // ────────────────────────────────────────────────────────────────
+  // COPY DELIVERY INFORMATION (NEW)
+  // ────────────────────────────────────────────────────────────────
+  const handleCopyDeliveryInfo = () => {
+    if (!selectedOrder) return;
+
+    const customerAddress = selectedOrder.address || "Unknown";
+    const phone = selectedOrder.phone || "N/A";
+    const maskedPhone =
+      phone.length >= 10
+        ? phone.slice(0, 4) + "XXXXXX" + phone.slice(-1)
+        : phone;
+    const orderId = selectedOrder.riderCode
+      ? `#${selectedOrder.riderCode.toUpperCase()}`
+      : selectedOrder.orderId || "N/A";
+    const deliveryFeeAmount = selectedOrder.deliveryFee || 0;
+
+    let text = "🚴 New Delivery information\n\n";
+
+    // Handle pickup(s)
+    const uniqueRestoIds = [
+      ...new Set(
+        structuredItems
+          .map((s) => findItemById(s.itemId).item?.restaurantId)
+          .filter(Boolean) as string[]
+      ),
+    ];
+
+    if (uniqueRestoIds.length === 1) {
+      const restoId = uniqueRestoIds[0];
+      const resto = restaurantDataMap[restoId];
+      const closest = branchDistances[restoId]?.[0];
+      const pickupAddress = closest
+        ? closest.address
+        : resto?.addresses?.[0] || "Unknown";
+      const pickupName = resto?.name || "Unknown Restaurant";
+
+      const pickupQuery = encodeURIComponent(pickupName);
+      const dropoffQuery = encodeURIComponent(customerAddress);
+      const routeOrigin = encodeURIComponent(pickupName);
+      const routeDest = encodeURIComponent(customerAddress);
+
+      text += `📍 Pickup (Restaurant):\nhttps://www.google.com/maps/search/?api=1&query=${pickupQuery}\n\n`;
+      text += `📍 Drop-off (Customer):\nhttps://www.google.com/maps/search/?api=1&query=${dropoffQuery}\n\n`;
+      text += `🧭 Full Route:\nhttps://www.google.com/maps/dir/?api=1&origin=${routeOrigin}&destination=${routeDest}\n\n`;
+    } else {
+      text += "📍 Pickups (Multiple Restaurants):\n";
+      uniqueRestoIds.forEach((restoId) => {
+        const resto = restaurantDataMap[restoId];
+        const closest = branchDistances[restoId]?.[0];
+        const pickupAddress = closest ? closest.address : "Unknown";
+        const pickupName = resto?.name || "Unknown Restaurant";
+        const pickupQuery = encodeURIComponent(pickupName);
+
+        text += `${pickupName}:\nhttps://www.google.com/maps/search/?api=1&query=${pickupQuery}\n\n`;
+      });
+      const dropoffQuery = encodeURIComponent(customerAddress);
+      text += `📍 Drop-off (Customer):\nhttps://www.google.com/maps/search/?api=1&query=${dropoffQuery}\n\n`;
+      text += "Note: Multiple pickups required – plan route accordingly.\n\n";
+    }
+
+    text += `📞 Customer: ${maskedPhone}\n`;
+    text += `🧾 Order ID: ${orderId}\n`;
+    text += `💰 Delivery Fee Amount: ${deliveryFeeAmount}`;
+
+    handleCopy(text.trim(), "Delivery Information");
+  };
+
+  // ────────────────────────────────────────────────────────────────
+  // COPY CLOSEST BRANCH (ONLY ADDRESS, NO DISTANCE)
+  // ────────────────────────────────────────────────────────────────
+  const handleCopyClosestBranch = (restoId: string) => {
+    const branches = branchDistances[restoId] || [];
+    if (branches.length === 0) return;
+
+    const closest = branches[0];
+    handleCopy(closest.address, `Closest Branch Address (${restoId})`);
+  };
+
+  // ────────────────────────────────────────────────────────────────
+  // COPY ORDER ITEMS SUMMARY (UPDATED FORMAT)
+  // ────────────────────────────────────────────────────────────────
+  const handleCopyOrderItems = () => {
+    if (!selectedOrder || structuredItems.length === 0) return;
+
+    let summary = "Order Items Summary\n═══════════════════════════════\n\n";
+
+    const orderId = selectedOrder.riderCode
+      ? `#${selectedOrder.riderCode.toUpperCase()}`
+      : selectedOrder.orderId || "N/A";
+
+    summary += `Order ID: ${orderId}\n`;
+
+    const date = new Date(selectedOrder.createdAt);
+    summary += `Date: ${date.toLocaleDateString(
+      "en-GB"
+    )}, ${date.toLocaleTimeString()}\n\n`;
+
+    const uniqueRestoIds = [
+      ...new Set(
+        structuredItems
+          .map((s) => findItemById(s.itemId).item?.restaurantId)
+          .filter(Boolean) as string[]
+      ),
+    ];
+
+    if (uniqueRestoIds.length === 1) {
+      const resto = restaurantDataMap[uniqueRestoIds[0]];
+      summary += `Restaurant: ${resto?.name || "Unknown"}\n`;
+      summary += "═══════════════════════════════\n\n";
+    }
+
+    structuredItems.forEach((item, index) => {
+      const { item: menuItem } = findItemById(item.itemId);
+      const restaurantName =
+        restaurantDataMap[menuItem?.restaurantId || ""]?.name ||
+        "Unknown Restaurant";
+
+      if (uniqueRestoIds.length > 1) {
+        summary += `Restaurant: ${restaurantName}\n`;
+        summary += "───────────────────────────────\n";
+      }
+
+      summary += `Item ${index + 1}: ${menuItem?.name || "Unknown Item"}\n`;
+      summary += `Quantity: ${item.quantity}\n`;
+      summary += `Price per item: ₦${item.priceAtOrder.toLocaleString()}\n`;
+
+      if (item.extrasIds.length > 0) {
+        summary += "Extras:\n";
+        item.extrasIds.forEach((extraStr) => {
+          const parsed = parseExtraId(extraStr);
+          const extra = fetchedExtras[parsed.extraId];
+          if (extra) {
+            const price = Number(extra.price) || 0;
+            const total = price * parsed.quantity;
+            summary += `- ${extra.name} x${
+              parsed.quantity
+            } (₦${total.toLocaleString()})\n`;
+          }
+        });
+      }
+
+      if (item.specialInstructions?.trim()) {
+        summary += `Special Instructions: ${item.specialInstructions.trim()}\n`;
+      }
+
+      summary += "───────────────────────────────\n\n";
+    });
+
+    if (selectedOrder.total) {
+      summary += `Grand Total: ₦${selectedOrder.total.toLocaleString()}\n`;
+    }
+
+    handleCopy(summary.trim(), "Order Items Summary");
+  };
+
   const paginatedOrders = filteredOrders.slice(
     (currentPage - 1) * ordersPerPage,
     currentPage * ordersPerPage
@@ -540,81 +694,10 @@ export default function OrdersTab({
     );
   };
 
-  const deliveryFee = selectedOrder?.deliveryFee || 333;
+  const deliveryFee = selectedOrder?.deliveryFee || 0;
   const deliveryTime = selectedOrder?.deliveryTime;
   const deliveryAddress = selectedOrder?.address;
   const deliverContact = selectedOrder?.phone;
-
-  const handleCopyClosestBranch = (restoId: string) => {
-    const branches = branchDistances[restoId] || [];
-    if (branches.length === 0) return;
-
-    const closest = branches[0];
-    const textToCopy = `${closest.address} (${closest.distanceText})`;
-    handleCopy(textToCopy, `Closest Branch ${restoId}`);
-  };
-
-  const handleCopyOrderItems = () => {
-    let summary = "Order Items Summary\n";
-    summary += "═══════════════════════════════\n\n";
-
-    // Add Rider Code at the top
-    if (selectedOrder?.riderCode) {
-      summary += `Rider Code: ${selectedOrder.riderCode}\n`;
-    } else {
-      summary += `Rider Code: Not available\n`;
-    }
-
-    // Optional: add order ID or other useful info
-    if (selectedOrder?.orderId) {
-      summary += `Order ID: ${selectedOrder.orderId}\n`;
-    }
-    summary += `Date: ${new Date(
-      selectedOrder?.createdAt || Date.now()
-    ).toLocaleString()}\n`;
-    summary += "═══════════════════════════════\n\n";
-
-    structuredItems.forEach((item, index) => {
-      const { item: menuItem } = findItemById(item.itemId);
-      const restaurantName =
-        restaurantDataMap[menuItem?.restaurantId || ""]?.name ||
-        "Unknown Restaurant";
-
-      summary += `Item ${index + 1}: ${menuItem?.name || "Unknown Item"}\n`;
-      summary += `Restaurant: ${restaurantName}\n`;
-      summary += `Quantity: ${item.quantity}\n`;
-      summary += `Price per item: ₦${item.priceAtOrder.toLocaleString()}\n`;
-
-      if (item.extrasIds.length > 0) {
-        summary += "Extras:\n";
-        item.extrasIds.forEach((extraStr) => {
-          const parsed = parseExtraId(extraStr);
-          const extra = fetchedExtras[parsed.extraId];
-          if (extra) {
-            const price = Number(extra.price) || 0; 
-            const total = price * parsed.quantity;
-
-            summary += `  - ${extra.name} x${
-              parsed.quantity
-            } (₦${total.toLocaleString()}) \n`;
-          }
-        });
-      }
-
-      if (item.specialInstructions?.trim()) {
-        summary += `Special Instructions: ${item.specialInstructions.trim()}\n`;
-      }
-
-      summary += "───────────────────────────────\n\n";
-    });
-
-    // Optional: add grand total at the bottom
-    if (selectedOrder?.total) {
-      summary += `Grand Total: ₦${selectedOrder.total.toLocaleString()}\n`;
-    }
-
-    handleCopy(summary.trim(), "Order Items Summary");
-  };
 
   return (
     <>
@@ -1037,13 +1120,22 @@ export default function OrdersTab({
           </DialogHeader>
 
           <div className="space-y-6 p-4 sm:p-6">
-            {/* Delivery Information */}
+            {/* Delivery Information (with copy button) */}
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 sm:p-5 rounded-2xl border-2 border-blue-200 dark:border-blue-800">
-              <div className="flex items-center gap-2 mb-4">
-                <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                  Delivery Information
-                </h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
+                    Delivery Information
+                  </h3>
+                </div>
+                <button
+                  onClick={handleCopyDeliveryInfo}
+                  className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                  title="Copy delivery information"
+                >
+                  <Copy className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
@@ -1069,6 +1161,42 @@ export default function OrdersTab({
                         <Copy className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       )}
                     </button>
+                  </div>
+                </div>
+
+                {/* New: Pickup Address Field */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">
+                    Pickup Address
+                  </label>
+                  <div className="flex items-start gap-2 p-3 bg-white dark:bg-gray-800 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                    <p className="flex-1 text-sm text-gray-900 dark:text-gray-100">
+                      {restaurantIdsForCurrentOrder.length === 1
+                        ? branchDistances[restaurantIdsForCurrentOrder[0]]?.[0]
+                            ?.address || "No closest branch available"
+                        : "Multiple Restaurants - See Pickup Branches below"}
+                    </p>
+                    {restaurantIdsForCurrentOrder.length === 1 &&
+                      branchDistances[restaurantIdsForCurrentOrder[0]]?.[0]
+                        ?.address && (
+                        <button
+                          onClick={() =>
+                            handleCopyClosestBranch(
+                              restaurantIdsForCurrentOrder[0]
+                            )
+                          }
+                          className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                          aria-label="Copy pickup address"
+                        >
+                          {copiedField ===
+                          `Closest Branch Address (${restaurantIdsForCurrentOrder[0]})` ? (
+                            <Check className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          )}
+                        </button>
+                      )}
                   </div>
                 </div>
 
@@ -1117,6 +1245,80 @@ export default function OrdersTab({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Restaurant Branches Section (moved right after Delivery Information) */}
+            <div className="space-y-4">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-orange-500" />
+                Pickup Branches (Closest First)
+              </h3>
+              {fetchingDistances ? (
+                <div className="flex items-center justify-center py-4">
+                  <Package className="w-6 h-6 animate-spin text-orange-500 mr-2" />
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Calculating distances...
+                  </p>
+                </div>
+              ) : Object.keys(restaurantDataMap).length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+                  No restaurants found for this order
+                </p>
+              ) : (
+                Object.entries(restaurantDataMap).map(([restoId, resto]) => {
+                  const branches = branchDistances[restoId] || [];
+                  const closest = branches[0];
+
+                  return (
+                    <div
+                      key={restoId}
+                      className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900 dark:text-white">
+                          {resto.name}
+                        </h4>
+                        {branches.length > 0 && (
+                          <button
+                            onClick={() => handleCopyClosestBranch(restoId)}
+                            className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                            title="Copy closest branch address (no distance)"
+                          >
+                            <Copy className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          </button>
+                        )}
+                      </div>
+
+                      {branches.length > 0 ? (
+                        <div className="space-y-2">
+                          {branches.map((branch, i) => (
+                            <div
+                              key={i}
+                              className={`p-3 rounded-xl border-2 ${
+                                i === 0
+                                  ? "border-green-400 bg-green-50 dark:bg-green-900/20"
+                                  : "border-gray-200 dark:border-gray-700"
+                              }`}
+                            >
+                              <p className="text-sm text-gray-900 dark:text-gray-100">
+                                {branch.address}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {branch.distanceText} • {branch.durationText}{" "}
+                                {i === 0 && "(Closest)"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          No branch addresses available
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Restaurant Loading Indicator */}
@@ -1416,71 +1618,6 @@ export default function OrdersTab({
                 })}
               </div>
             )}
-
-            {/* Restaurant Branches Section */}
-            <div className="space-y-4">
-              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-orange-500" />
-                Restaurant Branches
-              </h3>
-              {fetchingDistances ? (
-                <div className="flex items-center justify-center py-4">
-                  <Package className="w-6 h-6 animate-spin text-orange-500 mr-2" />
-                  <p className="text-gray-600 dark:text-gray-400">
-                    Calculating distances...
-                  </p>
-                </div>
-              ) : Object.keys(restaurantDataMap).length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                  No restaurants found for this order
-                </p>
-              ) : (
-                Object.entries(restaurantDataMap).map(([restoId, resto]) => {
-                  const branches = branchDistances[restoId] || [];
-                  const closest = branches[0];
-
-                  return (
-                    <div
-                      key={restoId}
-                      className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold text-gray-900 dark:text-white">
-                          {resto.name}
-                        </h4>
-                        {branches.length > 0 && (
-                          <button
-                            onClick={() => handleCopyClosestBranch(restoId)}
-                            className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                            title="Copy closest branch address"
-                          >
-                            <Copy className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                          </button>
-                        )}
-                      </div>
-
-                      {branches.length > 0 ? (
-                        <select
-                          defaultValue={closest?.address || ""}
-                          className="w-full p-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-orange-500 dark:focus:border-orange-500 transition-all"
-                        >
-                          {branches.map((branch, i) => (
-                            <option key={i} value={branch.address}>
-                              {branch.address} - {branch.distanceText} (
-                              {i === 0 ? "closest" : ""})
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          No branch addresses available
-                        </p>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
 
             {/* Grand Total Footer */}
             <div className="mt-6 pt-4 border-t-2 border-gray-200 dark:border-gray-700 bg-gradient-to-br from-orange-50 to-pink-50 dark:from-orange-900/20 dark:to-pink-900/20 p-4 rounded-2xl sticky bottom-0 z-10 sm:static sm:mt-0">
