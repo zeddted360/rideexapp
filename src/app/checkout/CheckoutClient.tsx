@@ -25,7 +25,7 @@ import {
 
 import { calculateDeliveryFeeSimple } from "@/utils/deliveryFeeCalculator";
 import { Loader } from "@googlemaps/js-api-loader";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { deleteOrderAsync, resetOrders } from "@/state/orderSlice";
 import BranchSelector from "@/components/checkout/BranchSelector";
 import UserLocationMap from "@/components/checkout/UserLocationMap";
@@ -54,7 +54,15 @@ import {
 } from "@/utils/sendSmsToNumber";
 import toast from "react-hot-toast";
 import { useGlobalMapControl } from "@/hooks/useGlobalMapControl";
-import { MapPin, AlertTriangle, Loader2 } from "lucide-react";
+import {
+  MapPin,
+  AlertTriangle,
+  Loader2,
+  ShoppingBag,
+  CheckCircle,
+} from "lucide-react";
+import Image from "next/image";
+import { fileUrl } from "@/utils/appwrite";
 
 export default function CheckoutClient() {
   const SERVICE_CHARGE = 200; // Fixed platform fee
@@ -88,6 +96,7 @@ export default function CheckoutClient() {
   const [restaurantAddresses, setRestaurantAddresses] = useState<{
     [key: string]: string[];
   }>({});
+  const [restaurant, setRestaurant] = useState<IRestaurantFetched | null>(null);
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lng: number;
@@ -108,12 +117,21 @@ export default function CheckoutClient() {
   const prevPaymentMethodRef = useRef<PaymentMethod>("card");
   const dispatch = useDispatch<AppDispatch>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const restaurantId = searchParams.get("restaurant");
 
   const orders = useSelector((state: RootState) => state.orders.orders) || [];
 
+  const filteredOrders = useMemo(() => {
+    if (!restaurantId) return [];
+    return orders.filter((order) => order.restaurantId === restaurantId);
+  }, [orders, restaurantId]);
+
+  const hasItems = filteredOrders.length > 0;
+
   const subtotal = useMemo(
-    () => orders.reduce((sum, item) => sum + (item.totalPrice || 0), 0),
-    [orders]
+    () => filteredOrders.reduce((sum, item) => sum + (item.totalPrice || 0), 0),
+    [filteredOrders]
   );
   const timeSlots = useMemo(
     () => (deliveryDay === "today" ? generateTimeSlots() : []),
@@ -241,32 +259,25 @@ export default function CheckoutClient() {
     };
   }, [googleMapsApiKey, initMap, handleError]);
 
-  // Fetch restaurant addresses for orders
+  // Fetch restaurant details
   useEffect(() => {
-    const fetchRestaurantAddresses = async () => {
-      const uniqueRestaurantIds = [
-        ...new Set(orders.map((item) => item.restaurantId)),
-      ];
+    const fetchRestaurant = async () => {
+      if (!restaurantId) return;
       const { databaseId, restaurantsCollectionId } = validateEnv();
-      const addressesMap: { [id: string]: string[] } = {};
-      for (const id of uniqueRestaurantIds) {
-        try {
-          const doc = (await databases.getDocument(
-            databaseId,
-            restaurantsCollectionId,
-            id
-          )) as IRestaurantFetched;
-          addressesMap[id] = doc.addresses || [];
-        } catch (err) {
-          console.error(`Failed to fetch addresses for restaurant ${id}:`, err);
-        }
+      try {
+        const doc = (await databases.getDocument(
+          databaseId,
+          restaurantsCollectionId,
+          restaurantId
+        )) as IRestaurantFetched;
+        setRestaurant(doc);
+        setRestaurantAddresses({ [restaurantId]: doc.addresses || [] });
+      } catch (err) {
+        console.error(`Failed to fetch restaurant ${restaurantId}:`, err);
       }
-      setRestaurantAddresses(addressesMap);
     };
-    if (orders.length > 0) {
-      fetchRestaurantAddresses();
-    }
-  }, [orders]);
+    fetchRestaurant();
+  }, [restaurantId]);
 
   // Calculate delivery fee + show service charge
   useEffect(() => {
@@ -513,15 +524,13 @@ export default function CheckoutClient() {
 
   // Handle place order
   const handlePlaceOrder = useCallback(() => {
-    if (orders.length === 0) {
-      toast("Your cart is empty. Redirecting back to the home...", {
-        duration: 4000,
-      });
+    if (!hasItems) {
+      toast("No items in cart for this restaurant", { duration: 4000 });
       router.push("/");
     } else {
       setShowConfirmation(true);
     }
-  }, [orders, router]);
+  }, [hasItems, router]);
 
   // Helper to parse distance in km
   const parseDistanceKm = useCallback((distanceStr: string): number => {
@@ -532,7 +541,7 @@ export default function CheckoutClient() {
 
   // Handle confirm order
   const handleConfirmOrder = useCallback(async () => {
-    if (!address || !phoneNumber || orders.length === 0) {
+    if (!address || !phoneNumber || !hasItems) {
       handleError(
         "Please add a delivery address, phone number, and items to your cart."
       );
@@ -564,7 +573,7 @@ export default function CheckoutClient() {
       const orderId = ID.unique();
       const riderCode = orderId.slice(-4).toUpperCase();
 
-      const structuredItems = orders.map((cartItem: ICartItemFetched) =>
+      const structuredItems = filteredOrders.map((cartItem: ICartItemFetched) =>
         JSON.stringify({
           itemId: cartItem.itemId,
           quantity: cartItem.quantity || 1,
@@ -590,7 +599,7 @@ export default function CheckoutClient() {
       const order = {
         orderId,
         riderCode,
-        itemIds: orders.map((item: ICartItemFetched) => item.itemId),
+        itemIds: filteredOrders.map((item: ICartItemFetched) => item.itemId),
         items: structuredItems,
         paymentMethod,
         address,
@@ -631,7 +640,7 @@ export default function CheckoutClient() {
       ]);
 
       await Promise.all(
-        orders.map((item: ICartItemFetched) =>
+        filteredOrders.map((item: ICartItemFetched) =>
           dispatch(deleteOrderAsync(item.$id))
         )
       );
@@ -677,7 +686,8 @@ export default function CheckoutClient() {
     phoneNumber,
     paymentMethod,
     selectedTimeSlot,
-    orders,
+    filteredOrders,
+    hasItems,
     subtotal,
     deliveryDay,
     deliveryFee,
@@ -716,145 +726,233 @@ export default function CheckoutClient() {
           </div>
         )}
 
-        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-10"
-          >
-            <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
-              <BranchSelector
-                selectedBranch={selectedBranch}
-                setSelectedBranch={setSelectedBranch}
-                branches={branches}
-              />
-            </section>
+        <div className="w-full max-w-6xl mb-8">
+          {restaurant ? (
+            <div className="flex items-center gap-4 bg-white/95 dark:bg-gray-900/90 rounded-2xl shadow-xl border border-orange-100 dark:border-gray-800 p-6">
+              {restaurant.logo && (
+                <div className="w-16 h-16 relative flex-shrink-0">
+                  <Image
+                    src={fileUrl(
+                      validateEnv().restaurantBucketId,
+                      restaurant.logo as string
+                    )}
+                    alt={restaurant.name}
+                    className="w-full h-full object-cover rounded-full"
+                    width={64}
+                    height={64}
+                    quality={90}
+                    loading="lazy"
+                  />
+                </div>
+              )}
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Checkout from {restaurant.name}
+                </h1>
+                {restaurant.deliveryTime && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Est. delivery: {restaurant.deliveryTime}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : restaurantId ? (
+            <div className="bg-white/95 dark:bg-gray-900/90 rounded-2xl shadow-xl border border-orange-100 dark:border-gray-800 p-6 text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-orange-500 mb-3" />
+              <p className="text-gray-600 dark:text-gray-400">
+                Loading restaurant details...
+              </p>
+            </div>
+          ) : null}
+        </div>
 
-            <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
-              {mapLoading ? (
-                <div className="h-64 flex items-center justify-center">
-                  <div className="text-center space-y-3">
-                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-orange-500" />
-                    <p className="text-gray-600 dark:text-gray-300">
-                      Loading map services...
+        {!restaurantId ? (
+          <div className="w-full max-w-6xl flex flex-col items-center justify-center py-20">
+            <AlertTriangle className="w-16 h-16 text-orange-500 mb-4" />
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+              Invalid Checkout Link
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 text-center max-w-md mb-8">
+              No restaurant specified. Please select items from the cart to
+              proceed.
+            </p>
+            <Button
+              onClick={() => router.push("/")}
+              className="h-12 px-8 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white rounded-xl font-semibold"
+            >
+              Return to Home
+            </Button>
+          </div>
+        ) : !hasItems ? (
+          <div className="w-full max-w-6xl flex flex-col items-center justify-center py-20">
+            <CheckCircle className="w-20 h-20 text-green-500 mb-6" />
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+              Cart Empty
+            </h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400 text-center max-w-md mb-4">
+              No items in your cart for {restaurant?.name || "this restaurant"}.
+            </p>
+            <p className="text-gray-500 dark:text-gray-500 text-center max-w-md mb-8">
+              If you just placed an order, it has been successfully submitted!
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button
+                onClick={() => router.push("/order-confirmation")}
+                className="h-12 px-8 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl font-semibold"
+              >
+                <ShoppingBag className="w-5 h-5 mr-2" />
+                View Order Confirmation
+              </Button>
+              <Button
+                onClick={() => router.push("/")}
+                variant="outline"
+                className="h-12 px-8 rounded-xl"
+              >
+                Continue Shopping
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-10">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="space-y-10"
+            >
+              <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
+                <BranchSelector
+                  selectedBranch={selectedBranch}
+                  setSelectedBranch={setSelectedBranch}
+                  branches={branches}
+                />
+              </section>
+
+              <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
+                {mapLoading ? (
+                  <div className="h-64 flex items-center justify-center">
+                    <div className="text-center space-y-3">
+                      <Loader2 className="h-10 w-10 animate-spin mx-auto text-orange-500" />
+                      <p className="text-gray-600 dark:text-gray-300">
+                        Loading map services...
+                      </p>
+                    </div>
+                  </div>
+                ) : isMapPaused ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-center px-6 py-10 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl">
+                    <MapPin className="h-12 w-12 text-amber-600 dark:text-amber-400 mb-4 opacity-80" />
+                    <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-300 mb-2">
+                      Map services temporarily unavailable
+                    </h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-400 max-w-md">
+                      {mapPauseMessage ||
+                        "We're currently unable to show maps or calculate exact distances. Please enter your address manually."}
                     </p>
                   </div>
-                </div>
-              ) : isMapPaused ? (
-                <div className="h-64 flex flex-col items-center justify-center text-center px-6 py-10 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl">
-                  <MapPin className="h-12 w-12 text-amber-600 dark:text-amber-400 mb-4 opacity-80" />
-                  <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-300 mb-2">
-                    Map services temporarily unavailable
-                  </h3>
-                  <p className="text-sm text-amber-700 dark:text-amber-400 max-w-md">
-                    {mapPauseMessage ||
-                      "We're currently unable to show maps or calculate exact distances. Please enter your address manually."}
-                  </p>
-                </div>
-              ) : (
-                <UserLocationMap
-                  userLocation={userLocation}
+                ) : (
+                  <UserLocationMap
+                    userLocation={userLocation}
+                    address={address}
+                    onNewAddressPicked={handleNewAddressPicked}
+                  />
+                )}
+              </section>
+
+              <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
+                <AddressSection
+                  offLocationModal={offLocationModal}
                   address={address}
-                  onNewAddressPicked={handleNewAddressPicked}
+                  phoneNumber={phoneNumber}
+                  showAddressForm={showAddressForm}
+                  setShowAddressForm={setShowAddressForm}
+                  addressMode={addressMode}
+                  userAddresses={userAddresses}
+                  setAddress={setAddress}
+                  setAddressMode={setAddressMode}
+                  tempAddress={tempAddress}
+                  setTempAddress={setTempAddress}
+                  manualMode={manualMode}
+                  setManualMode={setManualMode}
+                  googlePlaceSelected={googlePlaceSelected}
+                  setGooglePlaceSelected={setGooglePlaceSelected}
+                  selectedPlace={selectedPlace}
+                  setSelectedPlace={setSelectedPlace}
+                  lastPickedAddress={lastPickedAddress}
+                  setLastPickedAddress={setLastPickedAddress}
+                  apartmentFlat={apartmentFlat}
+                  setApartmentFlat={setApartmentFlat}
+                  label={label}
+                  setLabel={setLabel}
+                  error={error}
+                  setError={setError}
+                  handleSaveNewAddress={handleSaveNewAddress}
+                  handleAddAddress={handleAddAddress}
+                  selectedBranch={selectedBranch}
+                  branches={branches}
                 />
-              )}
-            </section>
+              </section>
 
-            <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
-              <AddressSection
-                offLocationModal={offLocationModal}
-                address={address}
-                phoneNumber={phoneNumber}
-                showAddressForm={showAddressForm}
-                setShowAddressForm={setShowAddressForm}
-                addressMode={addressMode}
-                userAddresses={userAddresses}
-                setAddress={setAddress}
-                setAddressMode={setAddressMode}
-                tempAddress={tempAddress}
-                setTempAddress={setTempAddress}
-                manualMode={manualMode}
-                setManualMode={setManualMode}
-                googlePlaceSelected={googlePlaceSelected}
-                setGooglePlaceSelected={setGooglePlaceSelected}
-                selectedPlace={selectedPlace}
-                setSelectedPlace={setSelectedPlace}
-                lastPickedAddress={lastPickedAddress}
-                setLastPickedAddress={setLastPickedAddress}
-                apartmentFlat={apartmentFlat}
-                setApartmentFlat={setApartmentFlat}
-                label={label}
-                setLabel={setLabel}
-                error={error}
-                setError={setError}
-                handleSaveNewAddress={handleSaveNewAddress}
-                handleAddAddress={handleAddAddress}
-                selectedBranch={selectedBranch}
-                branches={branches}
-              />
-            </section>
+              <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
+                <DeliveryOptions
+                  deliveryDay={deliveryDay}
+                  setDeliveryDay={setDeliveryDay}
+                  timeSlots={timeSlots}
+                  selectedTimeSlot={selectedTimeSlot}
+                  setSelectedTimeSlot={setSelectedTimeSlot}
+                />
+              </section>
+            </motion.div>
 
-            <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
-              <DeliveryOptions
-                deliveryDay={deliveryDay}
-                setDeliveryDay={setDeliveryDay}
-                timeSlots={timeSlots}
-                selectedTimeSlot={selectedTimeSlot}
-                setSelectedTimeSlot={setSelectedTimeSlot}
-              />
-            </section>
-          </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="space-y-10 lg:sticky lg:top-10"
+            >
+              <section className="rounded-2xl shadow-2xl bg-white/100 dark:bg-gray-900/95 border border-orange-200 dark:border-gray-800 p-6 mb-2">
+                <OrderSummary
+                  orders={filteredOrders.map((item) => ({
+                    ...item,
+                    price: Number(item.price),
+                    totalPrice: Number(item.totalPrice),
+                  }))}
+                  subtotal={subtotal}
+                  deliveryFee={effectiveDeliveryFee}
+                  isCalculatingFee={isCalculatingFee}
+                  deliveryDistance={deliveryDistance}
+                  deliveryDuration={deliveryDuration}
+                  paymentMethod={paymentMethod}
+                  originalDeliveryFee={deliveryFee}
+                />
+              </section>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="space-y-10 lg:sticky lg:top-10"
-          >
-            <section className="rounded-2xl shadow-2xl bg-white/100 dark:bg-gray-900/95 border border-orange-200 dark:border-gray-800 p-6 mb-2">
-              <OrderSummary
-                orders={orders.map((item) => ({
-                  ...item,
-                  price: Number(item.price),
-                  totalPrice: Number(item.totalPrice),
-                }))}
-                subtotal={subtotal}
-                deliveryFee={effectiveDeliveryFee}
-                isCalculatingFee={isCalculatingFee}
-                deliveryDistance={deliveryDistance}
-                deliveryDuration={deliveryDuration}
-                paymentMethod={paymentMethod}
-                originalDeliveryFee={deliveryFee}
-              />
-            </section>
+              <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
+                <PaymentMethodSelector
+                  paymentMethod={paymentMethod}
+                  setPaymentMethod={setPaymentMethod}
+                />
+              </section>
 
-            <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
-              <PaymentMethodSelector
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-              />
-            </section>
-
-            <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
-              <PlaceOrderButton
-                SERVICE_CHARGE={SERVICE_CHARGE}
-                subtotal={subtotal}
-                deliveryFee={effectiveDeliveryFee}
-                address={address}
-                phoneNumber={phoneNumber}
-                orders={orders}
-                isOrderLoading={isOrderLoading}
-                handlePlaceOrder={handlePlaceOrder}
-                showConfirmation={showConfirmation}
-                setShowConfirmation={setShowConfirmation}
-                handleConfirmOrder={handleConfirmOrder}
-                error={error}
-                totalAmount={totalAmount}
-              />
-            </section>
-          </motion.div>
-        </div>
+              <section className="rounded-2xl shadow-xl bg-white/95 dark:bg-gray-900/90 border border-orange-100 dark:border-gray-800 p-6 mb-2">
+                <PlaceOrderButton
+                  SERVICE_CHARGE={SERVICE_CHARGE}
+                  subtotal={subtotal}
+                  deliveryFee={effectiveDeliveryFee}
+                  address={address}
+                  phoneNumber={phoneNumber}
+                  orders={filteredOrders}
+                  isOrderLoading={isOrderLoading}
+                  handlePlaceOrder={handlePlaceOrder}
+                  showConfirmation={showConfirmation}
+                  setShowConfirmation={setShowConfirmation}
+                  handleConfirmOrder={handleConfirmOrder}
+                  error={error}
+                  totalAmount={totalAmount}
+                />
+              </section>
+            </motion.div>
+          </div>
+        )}
       </div>
       {showCashModal && <ShowCashModal setShowCashModal={setShowCashModal} />}
       {offLocationModal && (

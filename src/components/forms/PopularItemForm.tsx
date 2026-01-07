@@ -18,12 +18,29 @@ import {
   Sparkles,
   Plus,
   Pause,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import FileInput from "@/components/FileInput";
 import { PopularItemFormData } from "@/utils/schema";
-import { IRestaurantFetched, IFetchedExtras } from "../../../types/types";
+import {
+  IRestaurantFetched,
+  IFetchedExtras,
+  IPackFetched,
+} from "../../../types/types";
 import AddExtrasModal from "../vendor/AddExtrasModal";
 import toast from "react-hot-toast";
+import { useSelector } from "react-redux";
+import { RootState } from "@/state/store";
+import { useAuth } from "@/context/authContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import Link from "next/link";
 
 interface PopularItemFormProps {
   form: UseFormReturn<PopularItemFormData>;
@@ -31,6 +48,8 @@ interface PopularItemFormProps {
   onSubmit: (data: PopularItemFormData) => void;
   loading: boolean;
   onAddExtras: (selectedExtras: IFetchedExtras[]) => void;
+  onSelectExtra: (extraId: string | undefined) => void;
+  excludeTypes: string[];
 }
 
 const PopularItemForm = ({
@@ -39,10 +58,16 @@ const PopularItemForm = ({
   onSubmit,
   loading,
   onAddExtras,
+  onSelectExtra,
+  excludeTypes,
 }: PopularItemFormProps) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedRestaurant, setSelectedRestaurant] =
     useState<IRestaurantFetched | null>(null);
+  const { user } = useAuth();
+  const { extras, packs } = useSelector((state: RootState) => state.extra);
+  const needsTakeawayContainer = form.watch("needsTakeawayContainer");
+  const extraPortion = form.watch("extraPortion");
   const restaurantId = form.watch("restaurantId");
 
   // Update selected restaurant when restaurantId changes
@@ -64,11 +89,65 @@ const PopularItemForm = ({
       toast.error(
         "Your restaurant is currently paused and cannot accept new popular items. Please contact support to resume operations and get back online."
       );
-      // Optionally auto-clear selection
-      // form.setValue("restaurantId", "");
-      // setSelectedRestaurant(null);
     }
   }, [isPaused, restaurantId, form]);
+
+  // Find the compulsory packs by name
+  const mediumPack = packs.find(
+    (pack: IPackFetched) =>
+      pack.name === "Medium Container" && pack.vendorId === user?.userId
+  );
+  const bigPack = packs.find(
+    (pack: IPackFetched) =>
+      pack.name === "Big Container" && pack.vendorId === user?.userId
+  );
+
+  // Determine the selected pack ID automatically
+  const getSelectedPackId = () => {
+    if (!needsTakeawayContainer) return undefined;
+    return extraPortion ? bigPack?.$id : mediumPack?.$id;
+  };
+
+  const selectedPackId = getSelectedPackId();
+
+  // Get the selected pack for display
+  const selectedPack = selectedPackId
+    ? extraPortion
+      ? bigPack
+      : mediumPack
+    : undefined;
+
+  // Validation: Check if required pack exists
+  const hasNoMediumPack =
+    needsTakeawayContainer && !extraPortion && !mediumPack;
+  const hasNoBigPack = needsTakeawayContainer && extraPortion && !bigPack;
+
+  // Set or clear form error for pack availability
+  useEffect(() => {
+    if (hasNoMediumPack) {
+      form.setError("needsTakeawayContainer", {
+        type: "manual",
+        message: "No medium pack available. Please add one in Manage Extras.",
+      });
+    } else if (hasNoBigPack) {
+      form.setError("needsTakeawayContainer", {
+        type: "manual",
+        message: "No big pack available. Please add one in Manage Extras.",
+      });
+    } else {
+      form.clearErrors("needsTakeawayContainer");
+    }
+    // Pass selected pack ID to parent
+    onSelectExtra(selectedPackId);
+  }, [
+    needsTakeawayContainer,
+    extraPortion,
+    mediumPack,
+    bigPack,
+    selectedPackId,
+    form,
+    onSelectExtra,
+  ]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -220,9 +299,7 @@ const PopularItemForm = ({
                 >
                   <option value="">Select Category</option>
                   <option value="veg">🥗 Vegetarian</option>
-                  <option selected value="non-veg">
-                    🍖 Non-Vegetarian
-                  </option>
+                  <option value="non-veg">🍖 Non-Vegetarian</option>
                 </select>
                 {getFieldError("category") && (
                   <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
@@ -536,6 +613,146 @@ const PopularItemForm = ({
             </div>
           </div>
 
+          {/* Packaging Section */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
+              <Clock className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                Packaging & Preparation
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Takeaway Container Field */}
+              <div>
+                <Label
+                  htmlFor="needsTakeawayContainer"
+                  className="flex items-center gap-1"
+                >
+                  Requires Takeaway Packaging?
+                  <span className="text-gray-400 text-xs ml-1">(Optional)</span>
+                </Label>
+                <Select
+                  onValueChange={(value) => {
+                    form.setValue("needsTakeawayContainer", value === "yes");
+                    if (value === "no") {
+                      form.setValue("extraPortion", false);
+                    }
+                  }}
+                  defaultValue={needsTakeawayContainer ? "yes" : "no"}
+                  disabled={loading}
+                >
+                  <SelectTrigger className="h-12 mt-1.5">
+                    <SelectValue placeholder="Select option" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+                {getFieldError("needsTakeawayContainer") && (
+                  <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                    <Info className="w-3 h-3" />
+                    {getFieldError("needsTakeawayContainer")?.message as string}
+                  </p>
+                )}
+              </div>
+
+              {/* Conditional Extra Portion Field */}
+              {needsTakeawayContainer && (
+                <div className="md:col-span-2">
+                  <Label
+                    htmlFor="extraPortion"
+                    className="flex items-center gap-1"
+                  >
+                    Includes Extra Portion?
+                    <span className="text-gray-400 text-xs ml-1">
+                      (Optional)
+                    </span>
+                  </Label>
+                  <Select
+                    onValueChange={(value) => {
+                      form.setValue("extraPortion", value === "yes");
+                    }}
+                    defaultValue={extraPortion ? "yes" : "no"}
+                    disabled={loading}
+                  >
+                    <SelectTrigger className="h-12 mt-1.5">
+                      <SelectValue placeholder="Select option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yes">Yes</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {extraPortion && selectedPack && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      A big pack ({selectedPack.name} - ₦{selectedPack.price})
+                      will be automatically included for extra portions.
+                    </p>
+                  )}
+                  {!extraPortion && needsTakeawayContainer && selectedPack && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      A medium pack ({selectedPack.name} - ₦{selectedPack.price}
+                      ) will be automatically included.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Conditional Packaging Selection */}
+              {needsTakeawayContainer && (
+                <div className="md:col-span-2">
+                  <Label className="flex items-center gap-1">
+                    Packaging Selection
+                    <span className="text-gray-400 text-xs ml-1">
+                      (Automatically assigned)
+                    </span>
+                  </Label>
+                  <div className="mt-1.5">
+                    {selectedPack ? (
+                      <Input
+                        value={`${selectedPack.name} (₦${selectedPack.price})`}
+                        disabled
+                        className="h-12 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        No appropriate pack available.{" "}
+                        <Link
+                          href="/vendor/extras"
+                          className="text-orange-500 hover:underline"
+                        >
+                          Add a pack in Manage Extras
+                        </Link>
+                        .
+                      </p>
+                    )}
+                  </div>
+                  {hasNoMediumPack && (
+                    <Alert variant="destructive" className="mt-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Error</AlertTitle>
+                      <AlertDescription>
+                        No medium pack available. Please add one in Manage
+                        Extras.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {hasNoBigPack && (
+                    <Alert variant="destructive" className="mt-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Error</AlertTitle>
+                      <AlertDescription>
+                        No big pack available. Please add one in Manage Extras.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Extras Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
@@ -545,7 +762,11 @@ const PopularItemForm = ({
               </h3>
             </div>
             <div>
-              <AddExtrasModal onAddExtras={onAddExtras} loading={loading} />
+              <AddExtrasModal
+                onAddExtras={onAddExtras}
+                loading={loading}
+                excludeTypes={excludeTypes}
+              />
             </div>
           </div>
 
@@ -633,7 +854,7 @@ const PopularItemForm = ({
             <Button
               type="submit"
               className="flex items-center justify-center gap-2 px-8 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 sm:w-auto"
-              disabled={loading || isPaused}
+              disabled={loading || isPaused || hasNoMediumPack || hasNoBigPack}
             >
               {loading ? (
                 <>

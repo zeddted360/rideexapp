@@ -126,9 +126,17 @@ const AddFoodItemForm = () => {
     IFetchedExtras[]
   >([]);
   // State for selected extra ID (for MenuItemForm)
-  const [selectedExtraId, setSelectedExtraId] = useState<string | undefined>(
-    undefined
-  );
+  const [menuSelectedExtraId, setMenuSelectedExtraId] = useState<
+    string | undefined
+  >(undefined);
+  // State for selected extra ID (for FeaturedItemForm)
+  const [featuredSelectedExtraId, setFeaturedSelectedExtraId] = useState<
+    string | undefined
+  >(undefined);
+  // State for selected extra ID (for PopularItemForm)
+  const [popularSelectedExtraId, setPopularSelectedExtraId] = useState<
+    string | undefined
+  >(undefined);
 
   const dispatch = useDispatch<AppDispatch>();
   const { restaurants } = useSelector((state: RootState) => state.restaurant);
@@ -265,7 +273,6 @@ const AddFoodItemForm = () => {
     [popularItems, filteredRestaurants]
   );
 
-
   const filteredDiscounts = useMemo(
     () =>
       discounts.filter((item: IDiscountFetched) =>
@@ -302,6 +309,8 @@ const AddFoodItemForm = () => {
       rating: 0,
       restaurantId: "",
       category: "non-veg",
+      needsTakeawayContainer: false,
+      extraPortion: false,
     },
     mode: "onChange",
   });
@@ -316,11 +325,13 @@ const AddFoodItemForm = () => {
       rating: 0,
       reviewCount: 0,
       image: undefined,
-      category: "",
+      category: "non-veg",
       cookingTime: "",
       isPopular: true,
       discount: "",
       restaurantId: "",
+      needsTakeawayContainer: false,
+      extraPortion: false,
     },
     mode: "onChange",
   });
@@ -387,14 +398,14 @@ const AddFoodItemForm = () => {
         ...data,
         extras: [
           ...menuSelectedExtras.map((extra) => extra.$id),
-          ...(selectedExtraId ? [selectedExtraId] : []),
+          ...(menuSelectedExtraId ? [menuSelectedExtraId] : []),
         ],
       };
       // return;
       await dispatch(createAsyncMenuItem(payload)).unwrap();
       menuItemForm.reset();
       setMenuSelectedExtras([]);
-      setSelectedExtraId(undefined);
+      setMenuSelectedExtraId(undefined);
       toast.success("Menu item added successfully!");
     } catch (error) {
       toast.error("Failed to add menu item");
@@ -409,11 +420,15 @@ const AddFoodItemForm = () => {
     try {
       const payload: any = {
         ...data,
-        extras: featuredSelectedExtras.map((extra) => extra.$id),
+        extras: [
+          ...featuredSelectedExtras.map((extra) => extra.$id),
+          ...(featuredSelectedExtraId ? [featuredSelectedExtraId] : []),
+        ],
       };
       await dispatch(createAsyncFeaturedItem(payload)).unwrap();
       featuredItemForm.reset();
       setFeaturedSelectedExtras([]);
+      setFeaturedSelectedExtraId(undefined);
     } catch (error) {
       toast.error("Failed to add featured item");
     } finally {
@@ -427,11 +442,15 @@ const AddFoodItemForm = () => {
     try {
       const payload: any = {
         ...data,
-        extras: popularSelectedExtras.map((extra) => extra.$id),
+        extras: [
+          ...popularSelectedExtras.map((extra) => extra.$id),
+          ...(popularSelectedExtraId ? [popularSelectedExtraId] : []),
+        ],
       };
       await dispatch(createAsyncPopularItem(payload)).unwrap();
       popularItemForm.reset();
       setPopularSelectedExtras([]);
+      setPopularSelectedExtraId(undefined);
     } catch (error) {
       toast.error("Failed to add popular item");
     } finally {
@@ -518,6 +537,9 @@ const AddFoodItemForm = () => {
           rating: item.rating,
           category: item.category,
           restaurantId: item.restaurantId,
+          needsTakeawayContainer:
+            (item as IFeaturedItemFetched).needsTakeawayContainer || false,
+          extraPortion: (item as IFeaturedItemFetched).extraPortion || false,
         };
         break;
       case "popular":
@@ -534,6 +556,9 @@ const AddFoodItemForm = () => {
           discount: (item as IPopularItemFetched).discount || "",
           category: item.category,
           restaurantId: item.restaurantId,
+          needsTakeawayContainer:
+            (item as IPopularItemFetched).needsTakeawayContainer || false,
+          extraPortion: (item as IPopularItemFetched).extraPortion || false,
         };
         break;
       case "discount":
@@ -833,7 +858,7 @@ const AddFoodItemForm = () => {
                 setMenuSelectedExtras(selectedExtras);
                 toast.success(`${selectedExtras.length} extras added!`);
               }}
-              onSelectExtra={setSelectedExtraId}
+              onSelectExtra={setMenuSelectedExtraId}
               excludeTypes={[
                 "pack",
                 "plastic container",
@@ -856,6 +881,13 @@ const AddFoodItemForm = () => {
                 setFeaturedSelectedExtras(selectedExtras);
                 toast.success(`${selectedExtras.length} extras added!`);
               }}
+              onSelectExtra={setFeaturedSelectedExtraId}
+              excludeTypes={[
+                "pack",
+                "plastic container",
+                "take away container",
+                "take out pack",
+              ]}
             />
           </div>
         )}
@@ -872,6 +904,13 @@ const AddFoodItemForm = () => {
                 setPopularSelectedExtras(selectedExtras);
                 toast.success(`${selectedExtras.length} extras added!`);
               }}
+              onSelectExtra={setPopularSelectedExtraId}
+              excludeTypes={[
+                "pack",
+                "plastic container",
+                "take away container",
+                "take out pack",
+              ]}
             />
           </div>
         )}

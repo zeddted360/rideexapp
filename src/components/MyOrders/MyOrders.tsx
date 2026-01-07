@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,16 +84,25 @@ const MyOrders = () => {
     return orders.filter((order) => order.status === status);
   };
 
-  const handleCancelOrder = async (orderId: string) => {
-    try {
-      await dispatch(cancelBookedOrder(orderId)).unwrap();
-      toast.success("Order cancelled successfully!");
-    } catch (error) {
-      toast.error("Failed to cancel order");
-      console.error("Error cancelling order:", error);
-    }
-  };
+const handleCancelOrder = async (orderId: string) => {
+  const order = orders.find((o) => o.$id === orderId);
+  if (!order) return;
 
+  // Only pending orders can be cancelled
+  if (order.status !== "pending") {
+    toast.error("Only pending orders can be cancelled");
+    return;
+  }
+
+  try {
+    await dispatch(cancelBookedOrder(orderId)).unwrap();
+    toast.success("Order cancelled successfully!");
+  } catch (error) {
+    toast.error("Failed to cancel order");
+    console.error("Error cancelling order:", error);
+  }
+};
+  
   // FIXED: Correct payment amount with service charge logic
   const handlePayNow = (order: IBookedOrderFetched) => {
     if (!order.total || order.deliveryFee === undefined) {

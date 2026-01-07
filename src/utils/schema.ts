@@ -1,4 +1,3 @@
-// utils/schema.ts
 import { z } from "zod";
 
 // Custom refinement to validate FileList and extract the first File
@@ -163,6 +162,8 @@ export const featuredItemSchema = z.object({
   category: z.enum(["veg", "non-veg"], {
     required_error: "Category is required",
   }),
+  needsTakeawayContainer: z.boolean().optional(),
+  extraPortion: z.boolean().optional(),
 });
 
 export const popularItemSchema = z.object({
@@ -185,10 +186,9 @@ export const popularItemSchema = z.object({
     .min(0, "Rating must be between 0 and 5")
     .max(5, "Rating must be between 0 and 5"),
   reviewCount: z.number().min(0, "Review count must be 0 or more"),
-  category: z
-    .string()
-    .min(1, "Category is required")
-    .max(100, "Category is too long"),
+  category: z.enum(["veg", "non-veg"], {
+    required_error: "Category is required",
+  }),
   cookingTime: z
     .string()
     .min(1, "Cooking time is required")
@@ -199,6 +199,8 @@ export const popularItemSchema = z.object({
     .string()
     .min(1, "Restaurant is required")
     .max(36, "Restaurant ID is too long"),
+  needsTakeawayContainer: z.boolean().optional(),
+  extraPortion: z.boolean().optional(),
 });
 
 export const discountSchema = z
@@ -212,15 +214,15 @@ export const discountSchema = z
     discountType: z.enum(["percentage", "fixed"], {
       required_error: "Discount type is required",
     }),
+    discountValue: z
+      .number({ required_error: "Discount value is required" })
+      .positive("Discount value must be greater than 0"),
     originalPrice: z
       .number({ required_error: "Original value is required" })
       .positive("Original price must be greater than 0"),
     discountedPrice: z
       .number({ required_error: "Discount price is required" })
       .positive("Discounted price must be greater than 0"),
-    discountValue: z
-      .number({ required_error: "Discount value is required" })
-      .positive("Discount value must be greater than 0"),
     validFrom: z
       .string()
       .min(1, "Valid from date is required")

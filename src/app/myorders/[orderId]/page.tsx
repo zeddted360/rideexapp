@@ -69,7 +69,6 @@ export default function OrderDetailsPage() {
     (state: RootState) => state.bookedOrders
   );
 
-
   const menuItems = useSelector((state: RootState) => state.menuItem.menuItems);
   const featuredItems = useSelector(
     (state: RootState) => state.featuredItem.featuredItems
@@ -91,6 +90,7 @@ export default function OrderDetailsPage() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [prevStatus, setPrevStatus] = useState<string | null>(null);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [remainingTime, setRemainingTime] = useState<string>("");
 
   const findItemById = (id: string) => {
     return (
@@ -103,8 +103,7 @@ export default function OrderDetailsPage() {
 
   const getStatusMessage = (
     status: string,
-    deliveryDuration: string,
-    deliveryTime: string
+    deliveryDuration: string | undefined
   ) => {
     switch (status) {
       case "pending":
@@ -114,7 +113,13 @@ export default function OrderDetailsPage() {
       case "preparing":
         return "Your order is being prepared";
       case "out_for_delivery":
-        return `Estimated arrival: ${deliveryDuration}`;
+        if (!remainingTime && deliveryDuration) {
+          return `Estimated arrival: ${deliveryDuration}`;
+        }
+        if (remainingTime === "arriving now") {
+          return "Your order is arriving now!";
+        }
+        return `Estimated arrival in ${remainingTime}`;
       case "delivered":
         return "Your order has been delivered!";
       default:
@@ -148,20 +153,109 @@ export default function OrderDetailsPage() {
     };
   }, [orderId, dispatch]);
 
-  // Detect status change to delivered
+  // Detect status change to delivered for feedback
   useEffect(() => {
     if (
       currentOrder?.status === "delivered" &&
       !currentOrder.feedbackRating &&
       prevStatus !== "delivered"
     ) {
-      // Assuming no existing feedback field; you can add check if feedback exists
       setShowFeedbackModal(true);
     }
     if (currentOrder?.status) {
       setPrevStatus(currentOrder.status);
     }
   }, [currentOrder?.status, prevStatus, currentOrder?.feedbackRating]);
+
+  // Save end time when status changes to out_for_delivery (while page is open)
+  useEffect(() => {
+    if (
+      currentOrder?.status === "out_for_delivery" &&
+      prevStatus &&
+      prevStatus !== "out_for_delivery" &&
+      currentOrder.deliveryDuration
+    ) {
+      const match = currentOrder.deliveryDuration.match(/(\d+)/);
+      const minutes = match ? parseInt(match[1], 10) : 30;
+      if (minutes > 0) {
+        const endTime = new Date(Date.now() + minutes * 60000);
+        localStorage.setItem(
+          `deliveryEndTime_${orderId}`,
+          endTime.getTime().toString()
+        );
+      }
+    }
+  }, [
+    currentOrder?.status,
+    prevStatus,
+    currentOrder?.deliveryDuration,
+    orderId,
+  ]);
+
+  // Countdown timer logic with localStorage persistence
+  useEffect(() => {
+    if (
+      currentOrder?.status !== "out_for_delivery" ||
+      !currentOrder.deliveryDuration
+    ) {
+      setRemainingTime("");
+      return;
+    }
+
+    const storageKey = `deliveryEndTime_${orderId}`;
+    let savedEndTimeStr = localStorage.getItem(storageKey);
+    let endTime: Date;
+
+    if (savedEndTimeStr) {
+      endTime = new Date(parseInt(savedEndTimeStr, 10));
+    } else {
+      const match = currentOrder.deliveryDuration.match(/(\d+)/);
+      const minutes = match ? parseInt(match[1], 10) : 30;
+      endTime = new Date(Date.now() + minutes * 60000);
+      localStorage.setItem(storageKey, endTime.getTime().toString());
+    }
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const diff = endTime.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setRemainingTime("arriving now");
+        localStorage.removeItem(storageKey);
+        clearInterval(interval);
+        return;
+      }
+
+      const min = Math.floor(diff / 60000);
+      const sec = Math.floor((diff % 60000) / 1000);
+      setRemainingTime(`${min}:${sec.toString().padStart(2, "0")}`);
+    }, 1000);
+
+    // Initial calculation
+    const initialDiff = endTime.getTime() - Date.now();
+    if (initialDiff <= 0) {
+      setRemainingTime("arriving now");
+      localStorage.removeItem(storageKey);
+    } else {
+      const min = Math.floor(initialDiff / 60000);
+      const sec = Math.floor((initialDiff % 60000) / 1000);
+      setRemainingTime(`${min}:${sec.toString().padStart(2, "0")}`);
+    }
+
+    return () => clearInterval(interval);
+  }, [currentOrder?.status, currentOrder?.deliveryDuration, orderId]);
+
+  // Clean up localStorage when order is delivered or cancelled
+  useEffect(() => {
+    if (
+      currentOrder &&
+      (currentOrder.status === "delivered" ||
+        currentOrder.status === "cancelled")
+    ) {
+      localStorage.removeItem(`deliveryEndTime_${orderId}`);
+      setRemainingTime("");
+    }
+  }, [currentOrder?.status, orderId]);
 
   const branch = currentOrder
     ? branches.find((b) => b.id === currentOrder.selectedBranchId)
@@ -173,8 +267,7 @@ export default function OrderDetailsPage() {
     currentOrder?.orderId?.slice(-4).toUpperCase() ||
     "";
 
-  const canCancel =
-    currentOrder && ["pending", "confirmed"].includes(currentOrder.status);
+  const canCancel = currentOrder?.status === "pending";
 
   const supportPhone = branch
     ? branch.phone || "+234 800 000 0000"
@@ -194,19 +287,25 @@ export default function OrderDetailsPage() {
   };
 
   const handleCancelOrder = async () => {
-    if (currentOrder) {
-      setCancelling(true);
-      try {
-        await dispatch(cancelBookedOrder(currentOrder.$id));
-        toast.success("Order cancelled successfully!");
-        router.push("/myorders");
-      } catch (error) {
-        toast.error("Failed to cancel order");
-        console.error("Error cancelling order:", error);
-      } finally {
-        setCancelling(false);
-        setCancelDialogOpen(false);
-      }
+    if (!currentOrder) return;
+
+    if (currentOrder.status !== "pending") {
+      toast.error("Only pending orders can be cancelled");
+      setCancelDialogOpen(false);
+      return;
+    }
+
+    setCancelling(true);
+    try {
+      await dispatch(cancelBookedOrder(currentOrder.$id));
+      toast.success("Order cancelled successfully!");
+      router.push("/myorders");
+    } catch (error) {
+      toast.error("Failed to cancel order");
+      console.error("Error cancelling order:", error);
+    } finally {
+      setCancelling(false);
+      setCancelDialogOpen(false);
     }
   };
 
@@ -226,7 +325,6 @@ export default function OrderDetailsPage() {
       reference: currentOrder.orderId || currentOrder.$id,
       orderId: currentOrder.$id,
       onSuccess: () => {
-        // refresh order after payment
         dispatch(fetchBookedOrderById(currentOrder.$id));
       },
       onClose: () => {},
@@ -258,8 +356,7 @@ export default function OrderDetailsPage() {
 
   const statusMessage = getStatusMessage(
     currentOrder.status,
-    currentOrder.deliveryDuration || "",
-    currentOrder.deliveryTime || ""
+    currentOrder.deliveryDuration
   );
 
   return (
@@ -302,7 +399,6 @@ export default function OrderDetailsPage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                {/* Pulsing Ring Effect */}
                 <motion.div
                   className="absolute inset-0 rounded-full bg-white/40"
                   animate={{
@@ -315,7 +411,6 @@ export default function OrderDetailsPage() {
                     ease: "easeInOut",
                   }}
                 />
-                {/* Secondary Ring */}
                 <motion.div
                   className="absolute inset-0 rounded-full bg-white/30"
                   animate={{
@@ -329,7 +424,6 @@ export default function OrderDetailsPage() {
                     delay: 0.5,
                   }}
                 />
-                {/* Phone Icon with Blink */}
                 <motion.div
                   animate={{
                     opacity: [1, 0.3, 1],
@@ -447,6 +541,7 @@ export default function OrderDetailsPage() {
               })}
             </div>
           </div>
+
           {/* Order Details */}
           <div className="px-6 py-6 space-y-4">
             {/* Branch Info */}
@@ -470,7 +565,7 @@ export default function OrderDetailsPage() {
               </div>
             </div>
 
-            {/* Conditional Payment Method / Delivery Fee Section */}
+            {/* Payment Method & Delivery Fee */}
             <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-3">
                 {currentOrder.paymentMethod === "card" ? (
@@ -511,17 +606,15 @@ export default function OrderDetailsPage() {
               </div>
             </div>
 
-            {/* Order Summary */}
+            {/* Total */}
             <div className="p-5 bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-900/20 dark:to-orange-900/10 rounded-2xl border border-orange-200 dark:border-orange-900/30">
-              <div className="space-y-3">
-                <div className="border-orange-200 dark:border-orange-900/30 flex justify-between items-center">
-                  <span className="text-lg font-bold text-gray-900 dark:text-white">
-                    Total
-                  </span>
-                  <span className="text-2xl font-bold text-orange-600">
-                    ₦{currentOrder.total?.toLocaleString()}
-                  </span>
-                </div>
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-gray-900 dark:text-white">
+                  Total
+                </span>
+                <span className="text-2xl font-bold text-orange-600">
+                  ₦{currentOrder.total?.toLocaleString()}
+                </span>
               </div>
             </div>
 
@@ -609,8 +702,7 @@ export default function OrderDetailsPage() {
                               alt={item.name}
                               width={60}
                               height={60}
-                              className="rounded-lg object-cover w-15 h-15"
-                              quality={100}
+                              className="rounded-lg object-cover"
                             />
                           ) : (
                             <div className="w-15 h-15 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
@@ -691,7 +783,6 @@ export default function OrderDetailsPage() {
               </Button>
             )}
 
-            {/* Clear message for cash users */}
             {isCash && amountDueOnDelivery > 0 && !currentOrder.paid && (
               <p className="text-sm text-center text-amber-700 dark:text-amber-300 mt-2">
                 + ₦{amountDueOnDelivery.toLocaleString()} delivery fee to rider
@@ -699,7 +790,7 @@ export default function OrderDetailsPage() {
               </p>
             )}
 
-            {canCancel && (
+            {canCancel && !currentOrder.paid && (
               <Button
                 onClick={() => setCancelDialogOpen(true)}
                 variant="outline"
@@ -708,6 +799,21 @@ export default function OrderDetailsPage() {
                 <XCircle className="w-4 h-4 mr-2" />
                 Cancel Order
               </Button>
+            )}
+
+            {canCancel && currentOrder.paid && (
+              <div className="w-full">
+                <Button
+                  variant="outline"
+                  className="w-full h-12 border-2 border-gray-300 text-gray-500 cursor-not-allowed"
+                  disabled
+                >
+                  Cannot Cancel (Paid)
+                </Button>
+                <p className="text-xs text-center text-gray-500 mt-2">
+                  Paid orders cannot be cancelled
+                </p>
+              </div>
             )}
 
             {paymentError && (
@@ -732,7 +838,6 @@ export default function OrderDetailsPage() {
         </motion.p>
       </div>
 
-      {/* Cancel Dialog */}
       <CancelDialog
         cancelDialogOpen={cancelDialogOpen}
         cancelling={cancelling}
@@ -740,7 +845,7 @@ export default function OrderDetailsPage() {
         handleCancelOrder={handleCancelOrder}
         setCancelDialogOpen={setCancelDialogOpen}
       />
-      {/* Support Modal */}
+
       <SupportModal
         isOpen={showSupportModal}
         onClose={() => setShowSupportModal(false)}
@@ -751,7 +856,6 @@ export default function OrderDetailsPage() {
         whatsappNumber="+2348161427755"
       />
 
-      {/* Feedback Modal */}
       <OrderFeedbackModal
         isOpen={showFeedbackModal}
         onClose={() => setShowFeedbackModal(false)}

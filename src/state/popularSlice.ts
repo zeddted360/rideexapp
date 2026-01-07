@@ -1,3 +1,4 @@
+// state/popularSlice.ts (updated)
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { databases, storage, validateEnv } from "@/utils/appwrite";
 import { ID, Query } from "appwrite";
@@ -23,7 +24,8 @@ export const createAsyncPopularItem = createAsyncThunk<
   { rejectValue: string }
 >("popularItem/createPopularItem", async (data, { rejectWithValue }) => {
   try {
-    const { databaseId, popularBucketId, popularItemsCollectionId } = validateEnv();
+    const { databaseId, popularBucketId, popularItemsCollectionId } =
+      validateEnv();
     if (!data.image?.[0]) throw new Error("Popular item image is required");
 
     const imageFile = await storage.createFile(
@@ -48,15 +50,20 @@ export const createAsyncPopularItem = createAsyncThunk<
         isPopular: data.isPopular,
         discount: data.discount,
         restaurantId: data.restaurantId,
-        isApproved: false, 
-        extras: data.extras || [],  // Append extras as array of IDs
+        isApproved: false,
+        extras: data.extras || [],
+        needsTakeawayContainer: data.needsTakeawayContainer,
+        extraPortion: data.extraPortion,
       }
     );
     toast.success("Popular item created successfully!");
     return createdDocument as IPopularItemFetched;
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Failed to create popular item";
-    toast.error(`Failed to create popular item: ${errorMsg}. Check extras IDs if provided.`);
+    const errorMsg =
+      error instanceof Error ? error.message : "Failed to create popular item";
+    toast.error(
+      `Failed to create popular item: ${errorMsg}. Check extras IDs if provided.`
+    );
     return rejectWithValue(errorMsg);
   }
 });
@@ -75,7 +82,8 @@ export const listAsyncPopularItems = createAsyncThunk<
     );
     return response.documents as IPopularItemFetched[];
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Failed to fetch popular items";
+    const errorMsg =
+      error instanceof Error ? error.message : "Failed to fetch popular items";
     console.error(`Failed to fetch popular items: ${errorMsg}`);
     return rejectWithValue(errorMsg);
   }
@@ -84,93 +92,115 @@ export const listAsyncPopularItems = createAsyncThunk<
 // Function to update a popular item
 export const updateAsyncPopularItem = createAsyncThunk<
   IPopularItemFetched,
-  { itemId: string; data: Partial<PopularItemFormData & { extras?: string[] }>; newImage?: File | null },
+  {
+    itemId: string;
+    data: Partial<PopularItemFormData & { extras?: string[] }>;
+    newImage?: File | null;
+  },
   { rejectValue: string }
->("popularItem/updatePopularItem", async ({ itemId, data, newImage }, { rejectWithValue }) => {
-  try {
-    const { databaseId, popularItemsCollectionId, popularBucketId } = validateEnv();
+>(
+  "popularItem/updatePopularItem",
+  async ({ itemId, data, newImage }, { rejectWithValue }) => {
+    try {
+      const { databaseId, popularItemsCollectionId, popularBucketId } =
+        validateEnv();
 
-    let updateData = { 
-      ...data,
-      extras: data.extras !== undefined ? data.extras : undefined,  // Ensure extras is array or undefined
-    };
+      let updateData = {
+        ...data,
+        extras: data.extras !== undefined ? data.extras : undefined, // Ensure extras is array or undefined
+        // needsTakeawayContainer and extraPortion are included via spread if present
+      };
 
-    if (newImage) {
-      // Upload new image
-      const imageFile = await storage.createFile(
-        popularBucketId,
-        ID.unique(),
-        newImage
+      if (newImage) {
+        // Upload new image
+        const imageFile = await storage.createFile(
+          popularBucketId,
+          ID.unique(),
+          newImage
+        );
+        updateData.image = imageFile.$id;
+      }
+
+      const updatedDocument = await databases.updateDocument(
+        databaseId,
+        popularItemsCollectionId,
+        itemId,
+        updateData
       );
-      updateData.image = imageFile.$id;
+
+      toast.success("Popular item updated successfully!");
+      return updatedDocument as IPopularItemFetched;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(
+        `Failed to update popular item: ${errorMsg}. Check extras IDs if provided.`
+      );
+      return rejectWithValue(errorMsg);
     }
-
-    const updatedDocument = await databases.updateDocument(
-      databaseId,
-      popularItemsCollectionId,
-      itemId,
-      updateData
-    );
-
-    toast.success("Popular item updated successfully!");
-    return updatedDocument as IPopularItemFetched;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    toast.error(`Failed to update popular item: ${errorMsg}. Check extras IDs if provided.`);
-    return rejectWithValue(errorMsg);
   }
-});
+);
 
 // Function to approve/update approval status of a popular item
 export const updateApprovalAsyncPopularItem = createAsyncThunk<
   IPopularItemFetched,
   { itemId: string; isApproved: boolean },
   { rejectValue: string }
->("popularItem/updateApprovalPopularItem", async ({ itemId, isApproved }, { rejectWithValue }) => {
-  try {
-    const { databaseId, popularItemsCollectionId } = validateEnv();
+>(
+  "popularItem/updateApprovalPopularItem",
+  async ({ itemId, isApproved }, { rejectWithValue }) => {
+    try {
+      const { databaseId, popularItemsCollectionId } = validateEnv();
 
-    const updatedDocument = await databases.updateDocument(
-      databaseId,
-      popularItemsCollectionId,
-      itemId,
-      { isApproved }
-    );
+      const updatedDocument = await databases.updateDocument(
+        databaseId,
+        popularItemsCollectionId,
+        itemId,
+        { isApproved }
+      );
 
-    const status = isApproved ? "approved" : "rejected";
-    toast.success(`Popular item ${status} successfully!`);
-    return updatedDocument as IPopularItemFetched;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    toast.error(`Failed to update popular item approval: ${errorMsg}`);
-    return rejectWithValue(errorMsg);
+      const status = isApproved ? "approved" : "rejected";
+      toast.success(`Popular item ${status} successfully!`);
+      return updatedDocument as IPopularItemFetched;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to update popular item approval: ${errorMsg}`);
+      return rejectWithValue(errorMsg);
+    }
   }
-});
+);
 
 // Function to delete a popular item
 export const deleteAsyncPopularItem = createAsyncThunk<
   string,
   { itemId: string; imageId: string },
   { rejectValue: string }
->("popularItem/deletePopularItem", async ({ itemId, imageId }, { rejectWithValue }) => {
-  try {
-    const { databaseId, popularItemsCollectionId, popularBucketId } = validateEnv();
-    // Delete image if exists
-    if (imageId) {
-      await storage.deleteFile(popularBucketId, imageId);
+>(
+  "popularItem/deletePopularItem",
+  async ({ itemId, imageId }, { rejectWithValue }) => {
+    try {
+      const { databaseId, popularItemsCollectionId, popularBucketId } =
+        validateEnv();
+      // Delete image if exists
+      if (imageId) {
+        await storage.deleteFile(popularBucketId, imageId);
+      }
+
+      // Delete document
+      await databases.deleteDocument(
+        databaseId,
+        popularItemsCollectionId,
+        itemId
+      );
+
+      toast.success("Popular item deleted successfully!");
+      return itemId;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to delete popular item: ${errorMsg}`);
+      return rejectWithValue(errorMsg);
     }
-
-    // Delete document
-    await databases.deleteDocument(databaseId, popularItemsCollectionId, itemId);
-
-    toast.success("Popular item deleted successfully!");
-    return itemId;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    toast.error(`Failed to delete popular item: ${errorMsg}`);
-    return rejectWithValue(errorMsg);
   }
-});
+);
 
 export const popularSlice = createSlice({
   name: "popularItem",
@@ -225,7 +255,9 @@ export const popularSlice = createSlice({
         updateAsyncPopularItem.fulfilled,
         (state, action: PayloadAction<IPopularItemFetched>) => {
           state.loading = "succeeded";
-          const index = state.popularItems.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.popularItems.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.popularItems[index] = action.payload;
           }
@@ -248,7 +280,9 @@ export const popularSlice = createSlice({
         updateApprovalAsyncPopularItem.fulfilled,
         (state, action: PayloadAction<IPopularItemFetched>) => {
           state.loading = "succeeded";
-          const index = state.popularItems.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.popularItems.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.popularItems[index] = action.payload;
           }
@@ -259,7 +293,8 @@ export const popularSlice = createSlice({
         updateApprovalAsyncPopularItem.rejected,
         (state, action: PayloadAction<string | undefined>) => {
           state.loading = "failed";
-          state.error = action.payload || "Failed to update popular item approval";
+          state.error =
+            action.payload || "Failed to update popular item approval";
         }
       )
       // Delete
@@ -271,7 +306,9 @@ export const popularSlice = createSlice({
         deleteAsyncPopularItem.fulfilled,
         (state, action: PayloadAction<string>) => {
           state.loading = "succeeded";
-          state.popularItems = state.popularItems.filter((item) => item.$id !== action.payload);
+          state.popularItems = state.popularItems.filter(
+            (item) => item.$id !== action.payload
+          );
           state.error = null;
         }
       )

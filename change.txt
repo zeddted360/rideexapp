@@ -1,3 +1,5 @@
+cart drawer
+
 "use client";
 import React, { useEffect, useCallback, useMemo, useState } from "react";
 import {
@@ -30,7 +32,6 @@ import {
   ArrowRight,
   Package,
   CheckCircle,
-  ChevronDown,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -53,12 +54,11 @@ import {
   IFetchedExtras,
   IPackFetched,
   ISelectedExtra,
-  IRestaurantFetched,
 } from "../../../types/types";
 import { fileUrl, validateEnv } from "@/utils/appwrite";
+import { useAuth } from "@/context/authContext";
 import { databases } from "@/utils/appwrite";
 import { Query } from "appwrite";
-import { useAuth } from "@/context/authContext";
 
 const CartDrawer = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -74,10 +74,6 @@ const CartDrawer = () => {
   const [extrasCache, setExtrasCache] = useState<
     Record<string, IFetchedExtras | IPackFetched>
   >({});
-  const [restaurants, setRestaurants] = useState<
-    Record<string, IRestaurantFetched>
-  >({});
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const router = useRouter();
   const pathname = usePathname();
 
@@ -166,57 +162,12 @@ const CartDrawer = () => {
   }, [orders, extrasCache]);
 
   useEffect(() => {
-    const fetchRestaurants = async () => {
-      if (!orders || orders.length === 0) return;
-
-      const uniqueRestaurantIds = [
-        ...new Set(orders.map((o) => o.restaurantId)),
-      ];
-      const idsToFetch = uniqueRestaurantIds.filter((id) => !restaurants[id]);
-
-      if (idsToFetch.length === 0) return;
-
-      try {
-        const { databaseId, restaurantsCollectionId } = validateEnv();
-        const response = await databases.listDocuments(
-          databaseId,
-          restaurantsCollectionId,
-          [Query.equal("$id", idsToFetch)]
-        );
-        const fetchedRestaurants = (
-          response.documents as IRestaurantFetched[]
-        ).reduce((acc, doc) => {
-          acc[doc.$id] = doc;
-          return acc;
-        }, {} as Record<string, IRestaurantFetched>);
-
-        setRestaurants((prev) => ({ ...prev, ...fetchedRestaurants }));
-      } catch (error) {
-        console.error("Failed to fetch restaurants:", error);
-        toast.error("Failed to load restaurant details");
-      }
-    };
-
-    fetchRestaurants();
-  }, [orders, restaurants]);
-
-  useEffect(() => {
     if (!loading && (!orders || orders.length === 0) && activeCart) {
       setShowEmptyCartDialog(true);
     } else {
       setShowEmptyCartDialog(false);
     }
   }, [orders, loading, activeCart]);
-
-  const groups = useMemo(() => {
-    if (!orders) return {};
-    return orders.reduce((acc: Record<string, ICartItemFetched[]>, order) => {
-      const rid = order.restaurantId;
-      if (!acc[rid]) acc[rid] = [];
-      acc[rid].push(order);
-      return acc;
-    }, {});
-  }, [orders]);
 
   const calculateNewTotalPrice = useCallback(
     (order: ICartItemFetched, newQuantity: number): number => {
@@ -388,17 +339,6 @@ const CartDrawer = () => {
     [dispatch]
   );
 
-  const handleClearSelection = useCallback(
-    async (restaurantId: string) => {
-      const group = groups[restaurantId] || [];
-      for (const order of group) {
-        await handleDeleteOrder(order);
-      }
-      toast.success("Selection cleared for restaurant");
-    },
-    [groups, handleDeleteOrder]
-  );
-
   const subtotal = useMemo(
     () => orders?.reduce((sum, item) => sum + (item.totalPrice || 0), 0) || 0,
     [orders]
@@ -455,23 +395,13 @@ const CartDrawer = () => {
 
   const restrictedPaths = ["/checkout"];
 
-  const handleCheckout = (restaurantId: string) => {
-    const group = groups[restaurantId] || [];
-    const groupSubtotal = group.reduce(
-      (sum, item) => sum + (item.totalPrice || 0),
-      0
-    );
-
-    if (groupSubtotal < MIN_ORDER_AMOUNT) {
+  const handleCheckout = () => {
+    if (subtotal < MIN_ORDER_AMOUNT) {
       setShowMinAmountDialog(true);
       return;
     }
     setActiveCart(false);
-    router.push(`/checkout?restaurant=${restaurantId}`);
-  };
-
-  const toggleExpand = (restaurantId: string) => {
-    setExpanded((prev) => ({ ...prev, [restaurantId]: !prev[restaurantId] }));
+    router.push("/checkout");
   };
 
   return (
@@ -498,13 +428,13 @@ const CartDrawer = () => {
         )}
 
       <Drawer open={activeCart} onOpenChange={setActiveCart}>
-        <DrawerContent className="bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 rounded-t-3xl max-w-md w-full mx-auto h-[95vh] flex flex-col border-t-4 border-orange-500">
-          <DrawerHeader className="relative border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 sm:p-6">
+        <DrawerContent className="bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 rounded-t-3xl max-w-md mx-auto h-[85vh] flex flex-col border-t-4 border-orange-500">
+          <DrawerHeader className="relative border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-6">
             <div className="flex items-center gap-3 mb-1">
               <div className="bg-gradient-to-r from-orange-500 to-pink-500 p-2 rounded-xl">
                 <ShoppingBag className="w-5 h-5 text-white" />
               </div>
-              <DrawerTitle className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">
+              <DrawerTitle className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-pink-500 bg-clip-text text-transparent">
                 My Cart
               </DrawerTitle>
             </div>
@@ -526,12 +456,12 @@ const CartDrawer = () => {
 
           <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-b border-gray-200 dark:border-gray-700">
             <div className="inline-flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-full text-sm font-medium shadow-sm">
-              <span className="w-1 h-1 bg-white rounded-full animate-pulse"></span>
+              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
               Delivery Available
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
             {loading && !orders?.length ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <Loader2 className="animate-spin h-10 w-10 text-orange-500 mb-4" />
@@ -552,241 +482,147 @@ const CartDrawer = () => {
                 </p>
               </div>
             ) : orders && orders.length > 0 ? (
-              Object.keys(groups).map((restaurantId) => {
-                const group = groups[restaurantId];
-                const restaurant = restaurants[restaurantId];
-                const groupItemCount = group.length;
-                const groupSubtotal = group.reduce(
-                  (sum, item) => sum + (item.totalPrice || 0),
-                  0
-                );
-                const isExpanded = expanded[restaurantId] ?? true; // Default to expanded for better fit
+              orders.map((order) => {
+                const isDeleting = deletingItems.has(order.$id);
+                const itemExtras = getItemExtras(order);
+                const packagingExtras = getPackagingExtras(itemExtras);
+                const optionalExtras = getOptionalExtras(itemExtras);
+                const isDiscountItem = order.source === "discount";
+                const minOrderValue = order.minOrderValue || 0;
 
                 return (
                   <div
-                    key={restaurantId}
-                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 dark:border-gray-700 overflow-hidden"
+                    key={order.$id}
+                    className={cn(
+                      "bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 dark:border-gray-700",
+                      isDeleting && "opacity-50 scale-95"
+                    )}
                   >
-                    <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {restaurant?.logo && (
-                          <div className="w-8 h-8 sm:w-10 sm:h-10 relative">
-                            <Image
-                              src={fileUrl(
-                                validateEnv().restaurantBucketId,
-                                restaurant.logo as string
-                              )}
-                              alt={restaurant.name}
-                              className="w-full h-full object-cover rounded-full"
-                              width={40}
-                              height={40}
-                              quality={90}
-                              loading="lazy"
-                            />
-                          </div>
-                        )}
-                        <div>
-                          <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-base">
-                            {restaurant?.name || "Unknown Restaurant"}
-                          </h3>
+                    <div className="flex items-start gap-4">
+                      <div className="relative w-24 h-24 bg-gradient-to-br from-orange-100 to-pink-100 dark:from-orange-900/30 dark:to-pink-900/30 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
+                        <Image
+                          src={fileUrl(
+                            order.source === "featured"
+                              ? validateEnv().featuredBucketId
+                              : order.source === "popular"
+                              ? validateEnv().popularBucketId
+                              : order.source === "discount"
+                              ? validateEnv().discountBucketId
+                              : order.source === "offer"
+                              ? validateEnv().promoOfferBucketId
+                              : validateEnv().menuBucketId,
+                            order.image
+                          )}
+                          alt={order.name || "Item"}
+                          className="w-full h-full object-cover"
+                          width={96}
+                          height={96}
+                          quality={90}
+                          loading="lazy"
+                        />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 text-base truncate">
+                          {order.name || "Unknown Item"}
+                        </h3>
+                        <div className="space-y-1">
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {groupItemCount}{" "}
-                            {groupItemCount === 1 ? "item" : "items"} • ₦
-                            {groupSubtotal.toLocaleString()}
+                            <span className="font-medium">Unit Price:</span> ₦
+                            {(typeof order.price === "string"
+                              ? Number(order.price.replace(/[₦,]/g, ""))
+                              : order.price
+                            ).toLocaleString()}
+                          </p>
+
+                          {packagingExtras.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {packagingExtras.map((extra) => (
+                                <span
+                                  key={extra.$id}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs font-medium border border-green-200 dark:border-green-800"
+                                >
+                                  <CheckCircle className="w-2.5 h-2.5" />
+                                  {extra.name} x{extra.quantity}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {optionalExtras.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {optionalExtras.map((extra) => (
+                                <span
+                                  key={extra.$id}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-xs font-medium"
+                                >
+                                  <Plus className="w-2.5 h-2.5" />
+                                  {extra.name} x{extra.quantity}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          <p className="text-lg font-bold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
+                            ₦{order.totalPrice.toLocaleString()}
                           </p>
                         </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        onClick={() => toggleExpand(restaurantId)}
-                        className="flex items-center gap-1 text-sm"
-                      >
-                        <ChevronDown
-                          className={cn(
-                            "w-4 h-4 transition-transform",
-                            isExpanded && "rotate-180"
-                          )}
-                        />
-                      </Button>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="p-3 sm:p-4 space-y-3">
-                        {group.map((order) => {
-                          const isDeleting = deletingItems.has(order.$id);
-                          const itemExtras = getItemExtras(order);
-                          const packagingExtras =
-                            getPackagingExtras(itemExtras);
-                          const optionalExtras = getOptionalExtras(itemExtras);
-                          const isDiscountItem = order.source === "discount";
-                          const minOrderValue = order.minOrderValue || 0;
-
-                          return (
-                            <div
-                              key={order.$id}
-                              className={cn(
-                                "rounded-xl p-3 border border-gray-200 dark:border-gray-700",
-                                isDeleting && "opacity-50 scale-95"
-                              )}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className="relative w-16 h-16 bg-gradient-to-br from-orange-100 to-pink-100 dark:from-orange-900/30 dark:to-pink-900/30 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
-                                  <Image
-                                    src={fileUrl(
-                                      order.source === "featured"
-                                        ? validateEnv().featuredBucketId
-                                        : order.source === "popular"
-                                        ? validateEnv().popularBucketId
-                                        : order.source === "discount"
-                                        ? validateEnv().discountBucketId
-                                        : order.source === "offer"
-                                        ? validateEnv().promoOfferBucketId
-                                        : validateEnv().menuBucketId,
-                                      order.image
-                                    )}
-                                    alt={order.name || "Item"}
-                                    className="w-full h-full object-cover"
-                                    width={64}
-                                    height={64}
-                                    quality={90}
-                                    loading="lazy"
-                                  />
-                                </div>
-
-                                <div className="flex-1 min-w-0">
-                                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1 text-sm truncate">
-                                    {order.name || "Unknown Item"}
-                                  </h4>
-                                  <div className="space-y-0.5 text-xs">
-                                    <p className="text-gray-600 dark:text-gray-400">
-                                      <span className="font-medium">
-                                        Unit Price:
-                                      </span>{" "}
-                                      ₦
-                                      {(typeof order.price === "string"
-                                        ? Number(
-                                            order.price.replace(/[₦,]/g, "")
-                                          )
-                                        : order.price
-                                      ).toLocaleString()}
-                                    </p>
-
-                                    {packagingExtras.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {packagingExtras.map((extra) => (
-                                          <span
-                                            key={extra.$id}
-                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xxs font-medium border border-green-200 dark:border-green-800"
-                                          >
-                                            <CheckCircle className="w-2 h-2" />
-                                            {extra.name} x{extra.quantity}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    {optionalExtras.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {optionalExtras.map((extra) => (
-                                          <span
-                                            key={extra.$id}
-                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-xxs font-medium"
-                                          >
-                                            <Plus className="w-2 h-2" />
-                                            {extra.name} x{extra.quantity}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    <p className="font-bold text-orange-600 dark:text-orange-400">
-                                      ₦{order.totalPrice.toLocaleString()}
-                                    </p>
-                                  </div>
-                                  {order.specialInstructions && (
-                                    <p className="text-xxs text-gray-500 dark:text-gray-400 mt-1 italic line-clamp-1">
-                                      "{order.specialInstructions}"
-                                    </p>
-                                  )}
-                                  {isDiscountItem &&
-                                    order.quantity < minOrderValue && (
-                                      <div className="mt-1 p-1 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-md text-xxs text-orange-800 dark:text-orange-300 flex items-center gap-1">
-                                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                                        Min quantity: {minOrderValue}
-                                      </div>
-                                    )}
-                                </div>
-
-                                <div className="flex flex-col gap-1 items-end">
-                                  <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-full p-0.5">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() =>
-                                        handleUpdateQuantity(order, -1)
-                                      }
-                                      className="w-6 h-6 rounded-full hover:bg-white dark:hover:bg-gray-600"
-                                      disabled={loading || isDeleting}
-                                      aria-label={`Decrease quantity of ${order.name}`}
-                                    >
-                                      <Minus className="w-3 h-3" />
-                                    </Button>
-                                    <span className="w-6 text-center font-bold text-gray-900 dark:text-gray-100 text-xs">
-                                      {order.quantity}
-                                    </span>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() =>
-                                        handleUpdateQuantity(order, 1)
-                                      }
-                                      className="w-6 h-6 rounded-full hover:bg-white dark:hover:bg-gray-600"
-                                      disabled={loading || isDeleting}
-                                      aria-label={`Increase quantity of ${order.name}`}
-                                    >
-                                      <Plus className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDeleteOrder(order)}
-                                    className="w-6 h-6 bg-red-50 dark:bg-red-900/20 rounded-full text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800"
-                                    disabled={loading || isDeleting}
-                                    aria-label={`Delete ${order.name} from cart`}
-                                  >
-                                    {isDeleting ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="w-3 h-3" />
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
+                        {order.specialInstructions && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic line-clamp-2">
+                            "{order.specialInstructions}"
+                          </p>
+                        )}
+                        {isDiscountItem && order.quantity < minOrderValue && (
+                          <div className="mt-2 p-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                            <div className="flex items-center gap-2 text-sm text-orange-800 dark:text-orange-300">
+                              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                              <span>
+                                Minimum order quantity: {minOrderValue}
+                              </span>
                             </div>
-                          );
-                        })}
+                          </div>
+                        )}
                       </div>
-                    )}
 
-                    <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700">
-                      <div className="flex gap-3">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-full p-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleUpdateQuantity(order, -1)}
+                            className="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-gray-600"
+                            disabled={loading || isDeleting}
+                            aria-label={`Decrease quantity of ${order.name}`}
+                          >
+                            <Minus className="w-4 h-4" />
+                          </Button>
+                          <span className="w-8 text-center font-bold text-gray-900 dark:text-gray-100 text-sm">
+                            {order.quantity}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleUpdateQuantity(order, 1)}
+                            className="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-gray-600"
+                            disabled={loading || isDeleting}
+                            aria-label={`Increase quantity of ${order.name}`}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
                         <Button
-                          onClick={() => handleCheckout(restaurantId)}
-                          className="flex-1 h-10 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium rounded-xl text-sm"
-                          disabled={
-                            loading || groupItemCount === 0 || isCheckingOut
-                          }
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteOrder(order)}
+                          className="w-full h-8 bg-red-50 dark:bg-red-900/20 rounded-full text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800"
+                          disabled={loading || isDeleting}
+                          aria-label={`Delete ${order.name} from cart`}
                         >
-                          Checkout
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleClearSelection(restaurantId)}
-                          className="flex-1 h-10 rounded-xl text-sm"
-                          disabled={loading || groupItemCount === 0}
-                        >
-                          Clear Selection
+                          {isDeleting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -796,17 +632,48 @@ const CartDrawer = () => {
             ) : null}
           </div>
 
-          <DrawerFooter className="p-4 sm:p-6 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 space-y-4">
-            <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600 rounded-2xl p-3 sm:p-4">
-              <div className="flex justify-between items-center pt-3 border-t border-gray-300 dark:border-gray-500">
-                <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Grand Total
+          <DrawerFooter className="p-6 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 space-y-4">
+            <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600 rounded-2xl p-4">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Subtotal ({itemCount} {itemCount === 1 ? "item" : "items"})
                 </span>
-                <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  ₦{subtotal.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-3 border-t border-gray-300 dark:border-gray-500">
+                <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Total
+                </span>
+                <span className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">
                   ₦{subtotal.toLocaleString()}
                 </span>
               </div>
             </div>
+            <Button
+              onClick={handleCheckout}
+              className={cn(
+                "w-full h-14 text-lg font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl",
+                "bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white",
+                "flex items-center justify-center gap-3 group",
+                isCheckingOut && "opacity-50 cursor-not-allowed"
+              )}
+              disabled={!orders || orders.length === 0 || isCheckingOut}
+              aria-label="Proceed to checkout"
+            >
+              {isCheckingOut ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Proceed to Checkout
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </Button>
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -861,9 +728,10 @@ const CartDrawer = () => {
               Minimum Order Amount Required
             </DialogTitle>
             <DialogDescription className="text-base pt-2">
-              Your current order total is below the minimum of ₦
-              {MIN_ORDER_AMOUNT.toLocaleString()}. Please add more items to
-              proceed.
+              Your current order total is <b>₦{subtotal.toLocaleString()}.</b>{" "}
+              The minimum order amount is{" "}
+              <b>₦{MIN_ORDER_AMOUNT.toLocaleString()}.</b> Please add more items
+              to your cart to proceed with checkout.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="sm:justify-center gap-3 pt-4">

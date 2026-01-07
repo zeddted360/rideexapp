@@ -67,7 +67,7 @@ export interface IRestaurant {
   isPaused?: boolean;
 }
 
-export interface IRestaurantFetched extends IRestaurant, Models.Document { };
+export interface IRestaurantFetched extends IRestaurant, Models.Document {}
 
 export interface IFeaturedItem {
   name: string;
@@ -79,6 +79,8 @@ export interface IFeaturedItem {
   category: string;
   isApproved?: boolean;
   extras?: string[];
+  needsTakeawayContainer?: boolean;
+  extraPortion?: boolean;
 }
 
 export interface IFeaturedItemFetched extends IFeaturedItem, Models.Document {}
@@ -147,6 +149,8 @@ export interface IPopularItem {
   discount: string;
   isApproved?: boolean;
   extras?: string[];
+  needsTakeawayContainer?: boolean;
+  extraPortion?: boolean;
 }
 
 // Fetched popular item (from DB)
@@ -166,6 +170,8 @@ export interface PopularItemFormData {
   isPopular: boolean;
   discount: string;
   restaurantId: string;
+  needsTakeawayContainer?: boolean;
+  extraPortion?: boolean;
 }
 
 export type OrderStatus =
@@ -229,7 +235,7 @@ export interface IBookedOrderFetched extends Models.Document {
   createdAt: string;
   total: number;
   amountPaidOnline: number;
-  amountDueOnDelivery:number;
+  amountDueOnDelivery: number;
   status: OrderStatus;
   phone: string;
   deliveryFee: number;
@@ -344,7 +350,7 @@ export interface IPack {
   vendorId: string;
 }
 
-export interface IPackFetched extends IPack, Models.Document { }
+export interface IPackFetched extends IPack, Models.Document {}
 
 export interface Branch {
   id: number;

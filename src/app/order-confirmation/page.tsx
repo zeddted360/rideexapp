@@ -75,24 +75,19 @@ export default function OrderConfirmation() {
     }
   }, [latestOrder, riderCode, dispatch]);
 
-  const canCancel =
-    latestOrder &&
-    ["pending", "confirmed", "preparing"].includes(latestOrder.status);
+  const canCancel = latestOrder?.status === "pending";
 
   const isCash = latestOrder?.paymentMethod === "cash";
 
-
-  const fullTotal = latestOrder?.total ?? 0; 
-  const deliveryFeeStored = latestOrder?.deliveryFee ?? 0; 
+  const fullTotal = latestOrder?.total ?? 0;
+  const deliveryFeeStored = latestOrder?.deliveryFee ?? 0;
 
   const amountToPayOnline =
     latestOrder?.amountPaidOnline ??
-    (isCash
-      ? fullTotal - deliveryFeeStored
-      : fullTotal); 
+    (isCash ? fullTotal - deliveryFeeStored : fullTotal);
 
   const amountDueOnDelivery =
-    latestOrder?.amountDueOnDelivery ?? (isCash ? deliveryFeeStored : 0); 
+    latestOrder?.amountDueOnDelivery ?? (isCash ? deliveryFeeStored : 0);
 
   // Copy code
   const handleCopyCode = async () => {
@@ -114,7 +109,7 @@ export default function OrderConfirmation() {
 
     payWithPaystack({
       email: user?.email || "user@example.com",
-      amount: amountToPayOnline, 
+      amount: amountToPayOnline,
       reference: latestOrder.orderId || latestOrder.$id,
       orderId: latestOrder.$id,
       onSuccess: () => router.push(`/myorders/${latestOrder.orderId}`),
@@ -122,9 +117,15 @@ export default function OrderConfirmation() {
     });
   };
 
-  // Cancel order
   const handleCancelOrder = async () => {
     if (!latestOrder) return;
+    // Extra safety: only allow if still pending
+    if (latestOrder.status !== "pending") {
+      toast.error("Only pending orders can be cancelled");
+      setCancelDialogOpen(false);
+      return;
+    }
+
     setCancelling(true);
     try {
       await dispatch(cancelBookedOrder(latestOrder.$id));
@@ -424,7 +425,9 @@ export default function OrderConfirmation() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Button
                   onClick={handleTrackOrFeedback}
-                  className="h-12 flex items-center justify-center bg-white dark:bg-gray-900 border-2 border-orange-500 text-orange-600 dark:text-orange-400 font-semibold rounded-xl text-sm hover:bg-orange-50 dark:hover:bg-orange-900/20 shadow-md hover:shadow-lg"
+                  className={`h-12 flex items-center justify-center bg-white dark:bg-gray-900 border-2 border-orange-500 text-orange-600 dark:text-orange-400 font-semibold rounded-xl text-sm hover:bg-orange-50 dark:hover:bg-orange-900/20 shadow-md hover:shadow-lg ${
+                    !canCancel ? "sm:col-span-2" : ""
+                  }`}
                 >
                   <Truck className="w-4 h-4 mr-2" />
                   {latestOrder.status === "delivered"
@@ -432,7 +435,7 @@ export default function OrderConfirmation() {
                     : "Track Order"}
                 </Button>
 
-                {canCancel && (
+                {canCancel && !latestOrder.paid && (
                   <Button
                     onClick={() => setCancelDialogOpen(true)}
                     variant="outline"
@@ -442,9 +445,23 @@ export default function OrderConfirmation() {
                     Cancel Order
                   </Button>
                 )}
+
+                {canCancel && latestOrder.paid && (
+                  <div className="flex flex-col justify-center text-center">
+                    <Button
+                      variant="outline"
+                      disabled
+                      className="h-12 border-2 border-gray-300 text-gray-500 cursor-not-allowed"
+                    >
+                      Cannot Cancel (Paid)
+                    </Button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Paid orders cannot be cancelled
+                    </p>
+                  </div>
+                )}
               </div>
             </motion.div>
-
             {/* Payment Error */}
             <AnimatePresence>
               {paymentError && (

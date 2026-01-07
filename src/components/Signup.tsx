@@ -10,7 +10,6 @@ import toast from "react-hot-toast";
 import { account, databases, validateEnv } from "@/utils/appwrite";
 import { getUserPhone, storeUserPhone } from "@/utils/phoneStorage";
 import { generateUniqueEmail } from "@/utils/generateEmail";
-import Link from "next/link";
 import { SignupFormData, signupSchema } from "@/utils/authSchema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import PhoneCollection from "./signup/PhoneCollection";

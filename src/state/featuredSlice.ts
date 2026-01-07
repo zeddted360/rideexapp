@@ -1,3 +1,4 @@
+// state/featuredSlice.ts (updated)
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { databases, storage, validateEnv } from "@/utils/appwrite";
 import { ID, Query } from "appwrite";
@@ -24,8 +25,7 @@ export const createAsyncFeaturedItem = createAsyncThunk<
   { rejectValue: string }
 >("featuredItem/createFeaturedItem", async (data, { rejectWithValue }) => {
   try {
-    const { databaseId, featuredBucketId, featuredId } =
-      validateEnv();
+    const { databaseId, featuredBucketId, featuredId } = validateEnv();
     if (!data.image?.[0]) throw new Error("Featured item image is required");
 
     const imageFile = await storage.createFile(
@@ -46,8 +46,10 @@ export const createAsyncFeaturedItem = createAsyncThunk<
         restaurantId: data.restaurantId,
         description: data.description,
         category: data.category,
-        isApproved: false, 
-        extras: data.extras || [],  // Append extras as array of IDs
+        isApproved: false,
+        extras: data.extras || [],
+        needsTakeawayContainer: data.needsTakeawayContainer,
+        extraPortion: data.extraPortion,
       }
     );
 
@@ -55,7 +57,9 @@ export const createAsyncFeaturedItem = createAsyncThunk<
     return createdDocument as IFeaturedItemFetched;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    toast.error(`Failed to create featured item: ${errorMsg}. Check extras IDs if provided.`);
+    toast.error(
+      `Failed to create featured item: ${errorMsg}. Check extras IDs if provided.`
+    );
     return rejectWithValue(errorMsg);
   }
 });
@@ -70,11 +74,9 @@ export const listAsyncFeaturedItems = createAsyncThunk<
     const { databaseId, featuredId } = validateEnv();
 
     // Fetch all featured item documents
-    const response = await databases.listDocuments(
-      databaseId,
-      featuredId,
-      [Query.orderDesc("$createdAt")]
-    );
+    const response = await databases.listDocuments(databaseId, featuredId, [
+      Query.orderDesc("$createdAt"),
+    ]);
     return response.documents as IFeaturedItemFetched[];
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
@@ -86,94 +88,110 @@ export const listAsyncFeaturedItems = createAsyncThunk<
 // Function to update a featured item
 export const updateAsyncFeaturedItem = createAsyncThunk<
   IFeaturedItemFetched,
-  { itemId: string; data: Partial<FeaturedItemFormData & { extras?: string[] }>; newImage?: File | null },
+  {
+    itemId: string;
+    data: Partial<FeaturedItemFormData & { extras?: string[] }>;
+    newImage?: File | null;
+  },
   { rejectValue: string }
->("featuredItem/updateFeaturedItem", async ({ itemId, data, newImage }, { rejectWithValue }) => {
-  try {
-    const { databaseId, featuredId, featuredBucketId } = validateEnv();
+>(
+  "featuredItem/updateFeaturedItem",
+  async ({ itemId, data, newImage }, { rejectWithValue }) => {
+    try {
+      const { databaseId, featuredId, featuredBucketId } = validateEnv();
 
-    let updateData = { 
-      ...data,
-      extras: data.extras !== undefined ? data.extras : undefined,  // Ensure it's an array or undefined
-    };
+      let updateData = {
+        ...data,
+        extras: data.extras !== undefined ? data.extras : undefined, // Ensure it's an array or undefined
+        // needsTakeawayContainer and extraPortion are included via spread if present
+      };
 
-    if (newImage) {
-      // Upload new image
-      const imageFile = await storage.createFile(
-        featuredBucketId,
-        ID.unique(),
-        newImage
+      if (newImage) {
+        // Upload new image
+        const imageFile = await storage.createFile(
+          featuredBucketId,
+          ID.unique(),
+          newImage
+        );
+        updateData.image = imageFile.$id;
+      }
+
+      const updatedDocument = await databases.updateDocument(
+        databaseId,
+        featuredId,
+        itemId,
+        updateData
       );
-      updateData.image = imageFile.$id;
+
+      toast.success("Featured item updated successfully!");
+      return updatedDocument as IFeaturedItemFetched;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(
+        `Failed to update featured item: ${errorMsg}. Check extras IDs if provided.`
+      );
+      return rejectWithValue(errorMsg);
     }
-
-    const updatedDocument = await databases.updateDocument(
-      databaseId,
-      featuredId,
-      itemId,
-      updateData
-    );
-
-    toast.success("Featured item updated successfully!");
-    return updatedDocument as IFeaturedItemFetched;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    toast.error(`Failed to update featured item: ${errorMsg}. Check extras IDs if provided.`);
-    return rejectWithValue(errorMsg);
   }
-});
+);
 
 // Function to approve/update approval status of a featured item
 export const updateApprovalAsyncFeaturedItem = createAsyncThunk<
   IFeaturedItemFetched,
   { itemId: string; isApproved: boolean },
   { rejectValue: string }
->("featuredItem/updateApprovalFeaturedItem", async ({ itemId, isApproved }, { rejectWithValue }) => {
-  try {
-    const { databaseId, featuredId } = validateEnv();
+>(
+  "featuredItem/updateApprovalFeaturedItem",
+  async ({ itemId, isApproved }, { rejectWithValue }) => {
+    try {
+      const { databaseId, featuredId } = validateEnv();
 
-    const updatedDocument = await databases.updateDocument(
-      databaseId,
-      featuredId,
-      itemId,
-      { isApproved }
-    );
+      const updatedDocument = await databases.updateDocument(
+        databaseId,
+        featuredId,
+        itemId,
+        { isApproved }
+      );
 
-    const status = isApproved ? "approved" : "rejected";
-    toast.success(`Featured item ${status} successfully!`);
-    return updatedDocument as IFeaturedItemFetched;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    toast.error(`Failed to update featured item approval: ${errorMsg}`);
-    return rejectWithValue(errorMsg);
+      const status = isApproved ? "approved" : "rejected";
+      toast.success(`Featured item ${status} successfully!`);
+      return updatedDocument as IFeaturedItemFetched;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to update featured item approval: ${errorMsg}`);
+      return rejectWithValue(errorMsg);
+    }
   }
-});
+);
 
 // Function to delete a featured item
 export const deleteAsyncFeaturedItem = createAsyncThunk<
   string,
   { itemId: string; imageId: string },
   { rejectValue: string }
->("featuredItem/deleteFeaturedItem", async ({ itemId, imageId }, { rejectWithValue }) => {
-  try {
-    const { databaseId, featuredId, featuredBucketId } = validateEnv();
+>(
+  "featuredItem/deleteFeaturedItem",
+  async ({ itemId, imageId }, { rejectWithValue }) => {
+    try {
+      const { databaseId, featuredId, featuredBucketId } = validateEnv();
 
-    // Delete image if exists
-    if (imageId) {
-      await storage.deleteFile(featuredBucketId, imageId);
+      // Delete image if exists
+      if (imageId) {
+        await storage.deleteFile(featuredBucketId, imageId);
+      }
+
+      // Delete document
+      await databases.deleteDocument(databaseId, featuredId, itemId);
+
+      toast.success("Featured item deleted successfully!");
+      return itemId;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to delete featured item: ${errorMsg}`);
+      return rejectWithValue(errorMsg);
     }
-
-    // Delete document
-    await databases.deleteDocument(databaseId, featuredId, itemId);
-
-    toast.success("Featured item deleted successfully!");
-    return itemId;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    toast.error(`Failed to delete featured item: ${errorMsg}`);
-    return rejectWithValue(errorMsg);
   }
-});
+);
 
 export const featuredItemSlice = createSlice({
   name: "featuredItem",
@@ -229,7 +247,9 @@ export const featuredItemSlice = createSlice({
         updateAsyncFeaturedItem.fulfilled,
         (state, action: PayloadAction<IFeaturedItemFetched>) => {
           state.loading = "succeeded";
-          const index = state.featuredItems.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.featuredItems.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.featuredItems[index] = action.payload;
           }
@@ -252,7 +272,9 @@ export const featuredItemSlice = createSlice({
         updateApprovalAsyncFeaturedItem.fulfilled,
         (state, action: PayloadAction<IFeaturedItemFetched>) => {
           state.loading = "succeeded";
-          const index = state.featuredItems.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.featuredItems.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.featuredItems[index] = action.payload;
           }
@@ -263,7 +285,8 @@ export const featuredItemSlice = createSlice({
         updateApprovalAsyncFeaturedItem.rejected,
         (state, action: PayloadAction<string | undefined>) => {
           state.loading = "failed";
-          state.error = action.payload || "Failed to update featured item approval";
+          state.error =
+            action.payload || "Failed to update featured item approval";
         }
       )
       // Delete
@@ -275,7 +298,9 @@ export const featuredItemSlice = createSlice({
         deleteAsyncFeaturedItem.fulfilled,
         (state, action: PayloadAction<string>) => {
           state.loading = "succeeded";
-          state.featuredItems = state.featuredItems.filter((item) => item.$id !== action.payload);
+          state.featuredItems = state.featuredItems.filter(
+            (item) => item.$id !== action.payload
+          );
           state.error = null;
         }
       )

@@ -104,6 +104,16 @@ export const cancelBookedOrder = createAsyncThunk<
   }
 });
 
+function get_sms_message(status: string, rider_code: string) {
+  const messages: { [key: string]: string } = {
+    confirmed: `Yay! 🎉 Your order #${rider_code} is confirmed. We’ve received it and the restaurant is preparing your food.🍔🍕`,
+    out_for_delivery: `It’s on the way! 🚴💨 Your RideEx order #${rider_code} is out for delivery and will arrive soon.`,
+    delivered: `Bon appétit! 😋 Your RideEx order #${rider_code} has been successfully delivered. Thanks for choosing RideEx`,
+    cancelled: `Hey there! 👋 Your order #${rider_code} has been canceled. If you were charged, don’t worry—a refund is on the way Need help? Open the RideEx to reorder or contact support.`,
+  };
+  return messages[status] || null;
+}
+
 // Update booked order status
 
 export const updateBookedOrderAsync = createAsyncThunk<
@@ -127,22 +137,14 @@ export const updateBookedOrderAsync = createAsyncThunk<
       const updatedOrder = response as IBookedOrderFetched;
 
       if (orderData.status && updatedOrder.phone) {
-        // Optional: skip for certain statuses
-        const skipSMSFor = ["cancelled"];
-        if (skipSMSFor.includes(orderData.status)) {
-          console.log(`Skipping SMS for status: ${orderData.status}`);
-        } else {
-          const formattedStatus = orderData.status
-            .replace(/_/g, " ")
-            .toLowerCase();
-
-          const customerMessage = `Hi! 🎉 Your order #${
-            updatedOrder.riderCode || updatedOrder.orderId.slice(-6)
-          } is now ${formattedStatus}. Thank you for choosing RideEx! 😋`;
-
+        const message = get_sms_message(
+          orderData.status,
+          updatedOrder.riderCode || updatedOrder.orderId.slice(-6)
+        );
+        if (message) {
           const smsResult = await sendOrderFeedback({
             number: formatNigerianPhone(updatedOrder.phone),
-            message: customerMessage,
+            message: message,
           });
           if (!smsResult.success) {
             console.warn(
@@ -150,6 +152,8 @@ export const updateBookedOrderAsync = createAsyncThunk<
               smsResult
             );
           }
+        } else {
+          console.log(`No SMS for status: ${orderData.status}`);
         }
       }
 
@@ -166,22 +170,25 @@ export const updateBookedOrderRiderCode = createAsyncThunk<
   IBookedOrderFetched,
   { id: string; riderCode: string },
   { rejectValue: string }
->("bookedOrders/updateRiderCode", async ({ id, riderCode }, { rejectWithValue }) => {
-  try {
-    const { databaseId, bookedOrdersCollectionId } = validateEnv();
-    const response = await databases.updateDocument(
-      databaseId,
-      bookedOrdersCollectionId,
-      id,
-      { riderCode }
-    );
-    return response as IBookedOrderFetched;
-  } catch (error) {
-    return rejectWithValue(
-      error instanceof Error ? error.message : "Failed to update rider code"
-    );
+>(
+  "bookedOrders/updateRiderCode",
+  async ({ id, riderCode }, { rejectWithValue }) => {
+    try {
+      const { databaseId, bookedOrdersCollectionId } = validateEnv();
+      const response = await databases.updateDocument(
+        databaseId,
+        bookedOrdersCollectionId,
+        id,
+        { riderCode }
+      );
+      return response as IBookedOrderFetched;
+    } catch (error) {
+      return rejectWithValue(
+        error instanceof Error ? error.message : "Failed to update rider code"
+      );
+    }
   }
-});
+);
 
 export const bookedOrdersSlice = createSlice({
   name: "bookedOrders",

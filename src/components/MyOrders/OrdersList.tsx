@@ -244,7 +244,7 @@ const OrdersList = ({
                 (b) => b.id === order.selectedBranchId
               );
               const isCash = order.paymentMethod === "cash";
-              const canCancel = ["pending", "confirmed"].includes(order.status);
+              const canCancel = order.status === "pending";
               const canReorder = [
                 "delivered",
                 "completed",
@@ -406,7 +406,6 @@ const OrdersList = ({
                               </Link>
                             </Button>
                           )}
-
                         {order.status === "delivered" &&
                           !order.feedbackRating && (
                             <Button
@@ -418,7 +417,6 @@ const OrdersList = ({
                               Leave Feedback
                             </Button>
                           )}
-
                         {showPayButton && (
                           <Button
                             variant="default"
@@ -436,40 +434,41 @@ const OrdersList = ({
                               <>
                                 <CreditCardIcon className="w-4 h-4 mr-2" />
                                 Pay ₦{amountToPayNow.toLocaleString()}
-                               
                               </>
                             )}
                           </Button>
                         )}
 
-                        {canCancel && !order.paid && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleCancelClick(order)}
-                            className="flex-1 min-w-[120px] rounded-xl font-semibold"
-                          >
-                            <XCircle className="w-4 h-4 mr-2" />
-                            Cancel
-                          </Button>
-                        )}
-
-                        {canCancel && order.paid && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex-1">
-                                <Badge
-                                  variant="secondary"
-                                  className="w-full py-2 justify-center cursor-not-allowed opacity-70"
-                                >
-                                  Cannot Cancel (Paid)
-                                </Badge>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Paid orders cannot be cancelled</p>
-                            </TooltipContent>
-                          </Tooltip>
+                        {canCancel && (
+                          <>
+                            {!order.paid ? (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleCancelClick(order)}
+                                className="flex-1 min-w-[120px] rounded-xl font-semibold"
+                              >
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex-1">
+                                    <Badge
+                                      variant="secondary"
+                                      className="w-full py-2 justify-center cursor-not-allowed opacity-70"
+                                    >
+                                      Cannot Cancel (Paid)
+                                    </Badge>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Paid orders cannot be cancelled</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </>
                         )}
 
                         {canReorder && (
@@ -516,18 +515,6 @@ const OrdersList = ({
               </DialogTitle>
             </DialogHeader>
             <DialogDescription className="text-center space-y-3">
-              {orderToCancel?.status === "preparing" && (
-                <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-900/30">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs font-medium text-orange-700 dark:text-orange-300 text-left">
-                      The restaurant may have already started preparing your
-                      food. Cancelling now may not be possible or may incur a
-                      fee.
-                    </p>
-                  </div>
-                </div>
-              )}
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Are you sure you want to cancel order{" "}
                 <span className="font-semibold text-gray-900 dark:text-white">
