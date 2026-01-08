@@ -16,6 +16,7 @@ import extraReducer from "./extraSlice";
 import  promoOfferSlice  from "./offerSlice";
 import promotionalImagesReducer from "./promotionalImagesSlice";
 import usersReducer from "./usersSlice";
+import headerReducer from "./headerSlice";
 
 export const store = configureStore({
   reducer: {
@@ -35,6 +36,7 @@ export const store = configureStore({
     extra: extraReducer,
     promotionalImages: promotionalImagesReducer,
     users: usersReducer,
+    header: headerReducer,
   },
 });
 

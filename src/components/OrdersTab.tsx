@@ -523,7 +523,7 @@ export default function OrdersTab({
         ? phone.slice(0, 4) + "XXXXXX" + phone.slice(-1)
         : phone;
     const orderId = selectedOrder.riderCode
-      ? `#${selectedOrder.riderCode.toUpperCase()}`
+      ? `${selectedOrder.riderCode.toUpperCase()}`
       : selectedOrder.orderId || "N/A";
     const deliveryFeeAmount = selectedOrder.deliveryFee || 0;
 
@@ -598,7 +598,7 @@ export default function OrdersTab({
     let summary = "Order Items Summary\n═══════════════════════════════\n\n";
 
     const orderId = selectedOrder.riderCode
-      ? `#${selectedOrder.riderCode.toUpperCase()}`
+      ? `${selectedOrder.riderCode.toUpperCase()}`
       : selectedOrder.orderId || "N/A";
 
     summary += `Order ID: ${orderId}\n`;

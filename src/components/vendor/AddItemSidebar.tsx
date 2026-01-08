@@ -59,7 +59,7 @@ const AddItemSidebar = ({ activeTab, setActiveTab }: AddItemSidebarProps) => {
      { id: "extras", label: "Manage Extras", icon: PlusCircle, description: "Add extract" }
   ];
 
-  // console.log("The active tab is :", activeTab);
+  console.log("The active tab is :", activeTab);
 
   const user = useAuth();
   const role = user.role;

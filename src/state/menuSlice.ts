@@ -180,6 +180,31 @@ export const deleteAsyncMenuItem = createAsyncThunk<
   }
 });
 
+export const togglePauseMenuItem = createAsyncThunk<
+  IMenuItemFetched,
+  { itemId: string; isPaused: boolean },
+  { rejectValue: string }
+>("menuItem/togglePauseMenuItem", async ({ itemId, isPaused }, { rejectWithValue }) => {
+  try {
+    const { databaseId, menuItemsCollectionId } = validateEnv();
+
+    const updatedDocument = await databases.updateDocument(
+      databaseId,
+      menuItemsCollectionId,
+      itemId,
+      { isPaused }
+    );
+
+    toast.success(`Menu item ${isPaused ? "paused" : "resumed"} successfully!`);
+    return updatedDocument as IMenuItemFetched;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    toast.error(`Failed to toggle pause for menu item: ${errorMsg}`);
+    return rejectWithValue(errorMsg);
+  }
+});
+
+
 export const menuSlice = createSlice({
   name: "menuItem",
   initialState,
@@ -234,7 +259,9 @@ export const menuSlice = createSlice({
         updateAsyncMenuItem.fulfilled,
         (state, action: PayloadAction<IMenuItemFetched>) => {
           state.loading = "succeeded";
-          const index = state.menuItems.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.menuItems.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.menuItems[index] = action.payload;
           }
@@ -257,7 +284,9 @@ export const menuSlice = createSlice({
         updateApprovalAsyncMenuItem.fulfilled,
         (state, action: PayloadAction<IMenuItemFetched>) => {
           state.loading = "succeeded";
-          const index = state.menuItems.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.menuItems.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.menuItems[index] = action.payload;
           }
@@ -280,7 +309,9 @@ export const menuSlice = createSlice({
         deleteAsyncMenuItem.fulfilled,
         (state, action: PayloadAction<string>) => {
           state.loading = "succeeded";
-          state.menuItems = state.menuItems.filter((item) => item.$id !== action.payload);
+          state.menuItems = state.menuItems.filter(
+            (item) => item.$id !== action.payload
+          );
           state.error = null;
         }
       )
@@ -290,7 +321,33 @@ export const menuSlice = createSlice({
           state.loading = "failed";
           state.error = action.payload || "Failed to delete menu item";
         }
+      )
+      .addCase(togglePauseMenuItem.pending, (state) => {
+        state.loading = "pending";
+        state.error = null;
+      })
+      .addCase(
+        togglePauseMenuItem.fulfilled,
+        (state, action: PayloadAction<IMenuItemFetched>) => {
+          state.loading = "succeeded";
+          const index = state.menuItems.findIndex(
+            (d) => d.$id === action.payload.$id
+          );
+          if (index !== -1) {
+            state.menuItems[index] = action.payload;
+          }
+          state.error = null;
+        }
+      )
+      .addCase(
+        togglePauseMenuItem.rejected,
+        (state, action: PayloadAction<string | undefined>) => {
+          state.loading = "failed";
+          state.error = action.payload || "Failed to toggle pause discount";
+        }
       );
+
+
   },
 });
 

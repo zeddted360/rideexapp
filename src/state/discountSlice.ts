@@ -204,6 +204,36 @@ export const deleteAsyncDiscount = createAsyncThunk<
   }
 });
 
+export const togglePauseDiscount = createAsyncThunk<
+  IDiscountFetched,
+  { id: string; isPaused: boolean },
+  { rejectValue: string }
+>(
+  "discount/togglePauseDiscount",
+  async ({ id, isPaused }, { rejectWithValue }) => {
+    try {
+      const { databaseId, discountsCollectionId } = validateEnv();
+
+      const updatedDocument = await databases.updateDocument(
+        databaseId,
+        discountsCollectionId,
+        id,
+        { isPaused }
+      );
+
+      toast.success(
+        `Discount ${isPaused ? "paused" : "resumed"} successfully!`
+      );
+      return updatedDocument as IDiscountFetched;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to toggle pause for discount: ${errorMsg}`);
+      return rejectWithValue(errorMsg);
+    }
+  }
+);
+
+
 // Slice
 export const discountSlice = createSlice({
   name: "discount",
@@ -282,7 +312,9 @@ export const discountSlice = createSlice({
         deleteAsyncDiscount.fulfilled,
         (state, action: PayloadAction<string>) => {
           state.loading = "succeeded";
-          state.discounts = state.discounts.filter((d) => d.$id !== action.payload);
+          state.discounts = state.discounts.filter(
+            (d) => d.$id !== action.payload
+          );
           state.error = null;
         }
       )
@@ -291,6 +323,30 @@ export const discountSlice = createSlice({
         (state, action: PayloadAction<string | undefined>) => {
           state.loading = "failed";
           state.error = action.payload || "Failed to delete discount";
+        }
+      )
+      .addCase(togglePauseDiscount.pending, (state) => {
+        state.loading = "pending";
+        state.error = null;
+      })
+      .addCase(
+        togglePauseDiscount.fulfilled,
+        (state, action: PayloadAction<IDiscountFetched>) => {
+          state.loading = "succeeded";
+          const index = state.discounts.findIndex(
+            (d) => d.$id === action.payload.$id
+          );
+          if (index !== -1) {
+            state.discounts[index] = action.payload;
+          }
+          state.error = null;
+        }
+      )
+      .addCase(
+        togglePauseDiscount.rejected,
+        (state, action: PayloadAction<string | undefined>) => {
+          state.loading = "failed";
+          state.error = action.payload || "Failed to toggle pause discount";
         }
       );
   },

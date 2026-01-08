@@ -44,7 +44,7 @@ const OffersSection: React.FC<OffersSectionProps> = () => {
 
     // Take first 2 after shuffle
     return shuffled.slice(0, 2);
-  }, [offers]); // Re-run only when offers array changes
+  }, [offers]);
 
   const renderSkeletonCards = () => {
     const skeletons = Array.from({ length: 2 }).map(

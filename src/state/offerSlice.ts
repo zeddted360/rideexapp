@@ -250,6 +250,35 @@ export const deleteAsyncPromoOfferItem = createAsyncThunk<
   }
 });
 
+
+export const togglePausePromoOfferItem = createAsyncThunk<
+  IPromoOfferFetched,
+  { itemId: string; isPaused: boolean },
+  { rejectValue: string }
+>(
+  "promoOffer/togglePausePromoOfferItem",
+  async ({ itemId, isPaused }, { rejectWithValue }) => {
+    try {
+      const { databaseId, promoOfferCollectionId } = validateEnv();
+
+      const updatedDocument = await databases.updateDocument(
+        databaseId,
+        promoOfferCollectionId,
+        itemId,
+        { isPaused }
+      );
+
+      toast.success(`Offer ${isPaused ? "paused" : "resumed"} successfully!`);
+      return updatedDocument as IPromoOfferFetched;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to toggle pause: ${errorMsg}`);
+      return rejectWithValue(errorMsg);
+    }
+  }
+);
+
+
 export const promoOfferSlice = createSlice({
   name: "promoOffer",
   initialState,
@@ -305,7 +334,9 @@ export const promoOfferSlice = createSlice({
         updateAsyncOfferItem.fulfilled,
         (state, action: PayloadAction<IPromoOfferFetched>) => {
           state.actionLoading = "succeeded";
-          const index = state.offersItem.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.offersItem.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.offersItem[index] = action.payload;
           }
@@ -328,7 +359,9 @@ export const promoOfferSlice = createSlice({
         addExtraToOffer.fulfilled,
         (state, action: PayloadAction<IPromoOfferFetched>) => {
           state.actionLoading = "succeeded";
-          const index = state.offersItem.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.offersItem.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.offersItem[index] = action.payload;
           }
@@ -351,7 +384,9 @@ export const promoOfferSlice = createSlice({
         removeExtraFromOffer.fulfilled,
         (state, action: PayloadAction<IPromoOfferFetched>) => {
           state.actionLoading = "succeeded";
-          const index = state.offersItem.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.offersItem.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.offersItem[index] = action.payload;
           }
@@ -374,7 +409,9 @@ export const promoOfferSlice = createSlice({
         updateApprovalAsyncPromoOfferItem.fulfilled,
         (state, action: PayloadAction<IPromoOfferFetched>) => {
           state.actionLoading = "succeeded";
-          const index = state.offersItem.findIndex((item) => item.$id === action.payload.$id);
+          const index = state.offersItem.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
           if (index !== -1) {
             state.offersItem[index] = action.payload;
           }
@@ -385,7 +422,8 @@ export const promoOfferSlice = createSlice({
         updateApprovalAsyncPromoOfferItem.rejected,
         (state, action: PayloadAction<string | undefined>) => {
           state.actionLoading = "failed";
-          state.error = action.payload || "Failed to update promo offer item approval";
+          state.error =
+            action.payload || "Failed to update promo offer item approval";
         }
       )
       // Delete
@@ -397,7 +435,9 @@ export const promoOfferSlice = createSlice({
         deleteAsyncPromoOfferItem.fulfilled,
         (state, action: PayloadAction<string>) => {
           state.actionLoading = "succeeded";
-          state.offersItem = state.offersItem.filter((item) => item.$id !== action.payload);
+          state.offersItem = state.offersItem.filter(
+            (item) => item.$id !== action.payload
+          );
           state.error = null;
         }
       )
@@ -407,7 +447,32 @@ export const promoOfferSlice = createSlice({
           state.actionLoading = "failed";
           state.error = action.payload || "Failed to delete promo offer item";
         }
+      )
+      .addCase(togglePausePromoOfferItem.pending, (state) => {
+        state.actionLoading = "pending";
+        state.error = null;
+      })
+      .addCase(
+        togglePausePromoOfferItem.fulfilled,
+        (state, action: PayloadAction<IPromoOfferFetched>) => {
+          state.actionLoading = "succeeded";
+          const index = state.offersItem.findIndex(
+            (item) => item.$id === action.payload.$id
+          );
+          if (index !== -1) {
+            state.offersItem[index] = action.payload;
+          }
+          state.error = null;
+        }
+      )
+      .addCase(
+        togglePausePromoOfferItem.rejected,
+        (state, action: PayloadAction<string | undefined>) => {
+          state.actionLoading = "failed";
+          state.error = action.payload || "Failed to toggle pause for offer";
+        }
       );
+      ;
   },
 });
 

@@ -37,6 +37,7 @@ export interface IMenuItem {
   extras?: string[];
   needsTakeawayContainer?: boolean;
   extraPortion?: boolean;
+  isPaused?: boolean;
 }
 
 export interface IMenuItemFetched extends IMenuItem, Models.Document {}
@@ -81,15 +82,14 @@ export interface IFeaturedItem {
   extras?: string[];
   needsTakeawayContainer?: boolean;
   extraPortion?: boolean;
+  isPaused?: boolean;
 }
 
 export interface IFeaturedItemFetched extends IFeaturedItem, Models.Document {}
 
-// inital cart item
 export interface ICartItem {
   userId: string;
   itemId: string;
-  // item: string;
   name: string;
   image: string;
   price: string | number;
@@ -110,7 +110,6 @@ export interface ICartItem {
   validTo?: string;
 }
 
-//  cart item order processed
 export interface ICartItemOrder extends ICartItem {
   specialInstructions?: string;
   totalPrice: number;
@@ -130,6 +129,7 @@ export interface IPromoOffer {
   restaurantId: string;
   isApproved?: boolean;
   extras?: string[];
+  isPaused?: boolean;
 }
 
 export interface IPromoOfferFetched extends IPromoOffer, Models.Document {}
@@ -151,12 +151,11 @@ export interface IPopularItem {
   extras?: string[];
   needsTakeawayContainer?: boolean;
   extraPortion?: boolean;
+  isPaused?: boolean;
 }
 
-// Fetched popular item (from DB)
 export interface IPopularItemFetched extends IPopularItem, Models.Document {}
 
-// Form data for popular item (for react-hook-form)
 export interface PopularItemFormData {
   name: string;
   description: string;
@@ -185,7 +184,6 @@ export type OrderStatus =
   | "cancelled"
   | "failed";
 
-// Notification types
 export interface INotification {
   type:
     | "admin_new_order"
@@ -207,13 +205,12 @@ export interface INotification {
   selectedBranchId?: number;
   status: "unread" | "read";
   createdAt: string;
-  label?: "Home" | "Work" | "Other"; // Added label for address type
+  label?: "Home" | "Work" | "Other"; 
   riderCode?: string;
 }
 
 export interface INotificationFetched extends INotification, Models.Document {}
 
-// State interface
 export interface INotificationState {
   notifications: INotificationFetched[];
   adminNotifications: INotificationFetched[];
@@ -264,7 +261,7 @@ export interface ISearchResult {
   distance?: string;
   slug?: string;
 }
-// newly added
+
 export interface IVendor {
   fullName: string;
   phoneNumber: string;
@@ -326,6 +323,7 @@ export interface IDiscount {
   extras?: string[];
   restaurantId?: string;
   isApproved?: boolean;
+  isPaused?: boolean; 
 }
 export interface IDiscountFetched extends IDiscount, Models.Document {}
 

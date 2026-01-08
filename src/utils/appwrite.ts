@@ -40,6 +40,8 @@ interface EnvConfig {
   adminPromotionCodesCollectionId: string;
   mapSubscriptionsCollectionId: string;
   recoveryTokensCollectionId: string;
+  offerHeaderConfigCollectionId: string;
+  offerHeaderLogoBucketId: string;
 }
 
 // Validate environment variables
@@ -90,7 +92,12 @@ export function validateEnv(): EnvConfig {
     adminPromotionCodesCollectionId:
       process.env.NEXT_PUBLIC_APPWRITE_ADMIN_PROMOTION_COLLECTION!,
     mapSubscriptionsCollectionId: process.env.NEXT_PUBLIC_MAP_SUB_COLLECTION_ID,
-    recoveryTokensCollectionId: process.env.NEXT_PUBLIC_APPWRITE_RECOVERY_TOKENS_COLLECTION_ID,
+    recoveryTokensCollectionId:
+      process.env.NEXT_PUBLIC_APPWRITE_RECOVERY_TOKENS_COLLECTION_ID,
+    offerHeaderConfigCollectionId:
+      process.env.NEXT_PUBLIC_OFFER_HEADER_CONFIG_COLLECTION_ID,
+    offerHeaderLogoBucketId:
+      process.env.NEXT_PUBLIC_OFFER_HEADER_LOGO_BUCKET_ID,
   };
 
   // Check for undefined environment variables
@@ -143,8 +150,12 @@ export function validateEnv(): EnvConfig {
     adminPromotionCodesCollectionId:
       requiredEnvVars.adminPromotionCodesCollectionId!,
     mapSubscriptionsCollectionId: requiredEnvVars.mapSubscriptionsCollectionId!,
-    driversLicenceBucketId: process.env.NEXT_PUBLIC_APPWRITE_DRIVERS_LICENCE_BUCKET_ID!,
+    driversLicenceBucketId:
+      process.env.NEXT_PUBLIC_APPWRITE_DRIVERS_LICENCE_BUCKET_ID!,
     recoveryTokensCollectionId: requiredEnvVars.recoveryTokensCollectionId!,
+    offerHeaderConfigCollectionId:
+      requiredEnvVars.offerHeaderConfigCollectionId!,
+    offerHeaderLogoBucketId: requiredEnvVars.offerHeaderLogoBucketId!,
   };
 }
 

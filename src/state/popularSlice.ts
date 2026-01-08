@@ -202,6 +202,31 @@ export const deleteAsyncPopularItem = createAsyncThunk<
   }
 );
 
+export const togglePausePopularItem = createAsyncThunk<
+  IPopularItemFetched,
+  { itemId: string; isPaused: boolean },
+  { rejectValue: string }
+>("menuItem/togglePauseMenuItem", async ({ itemId, isPaused }, { rejectWithValue }) => {
+  try {
+    const { databaseId, popularItemsCollectionId } = validateEnv();
+
+    const updatedDocument = await databases.updateDocument(
+      databaseId,
+      popularItemsCollectionId,
+      itemId,
+      { isPaused }
+    );
+
+    toast.success(`Menu item ${isPaused ? "paused" : "resumed"} successfully!`);
+    return updatedDocument as IPopularItemFetched;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    toast.error(`Failed to toggle pause for menu item: ${errorMsg}`);
+    return rejectWithValue(errorMsg);
+  }
+});
+
+
 export const popularSlice = createSlice({
   name: "popularItem",
   initialState,
@@ -318,7 +343,32 @@ export const popularSlice = createSlice({
           state.loading = "failed";
           state.error = action.payload || "Failed to delete popular item";
         }
+      )
+      .addCase(togglePausePopularItem.pending, (state) => {
+        state.loading = "pending";
+        state.error = null;
+      })
+      .addCase(
+        togglePausePopularItem.fulfilled,
+        (state, action: PayloadAction<IPopularItemFetched>) => {
+          state.loading = "succeeded";
+          const index = state.popularItems.findIndex(
+            (d) => d.$id === action.payload.$id
+          );
+          if (index !== -1) {
+            state.popularItems[index] = action.payload;
+          }
+          state.error = null;
+        }
+      )
+      .addCase(
+        togglePausePopularItem.rejected,
+        (state, action: PayloadAction<string | undefined>) => {
+          state.loading = "failed";
+          state.error = action.payload || "Failed to toggle pause discount";
+        }
       );
+      ;
   },
 });
 

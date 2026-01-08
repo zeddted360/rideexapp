@@ -1,207 +1,17 @@
+// components/DiscountsList.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "@/state/store";
-import { motion } from "framer-motion";
-import {
-  ShoppingCart,
-  Heart,
-  Clock,
-  Info,
-  Award,
-  Check,
-  Loader2,
-  Utensils,
-} from "lucide-react";
-import Image from "next/image";
-import { fileUrl, validateEnv } from "@/utils/appwrite";
+import { Award } from "lucide-react";
+import { useAuth } from "@/context/authContext";
 import { useRouter } from "next/navigation";
 import { useShowCart } from "@/context/showCart";
-import { useAuth } from "@/context/authContext";
 import { IDiscountFetched } from "../../types/types";
-import { Button } from "./ui/button";
-import { useRestaurantById } from "@/hooks/useRestaurant";
 import DiscountsSkeleton from "./DiscountsSkeleton";
 import { listAsyncDiscounts } from "@/state/discountSlice";
-
-// Child component: DiscountItem (unchanged, just extracted for clarity)
-const DiscountItem = ({
-  discount,
-  index,
-  favorites,
-  toggleFavorite,
-  handleApplyDeal,
-}: {
-  discount: IDiscountFetched;
-  index: number;
-  favorites: Set<string>;
-  toggleFavorite: (id: string) => void;
-  handleApplyDeal: (discount: IDiscountFetched) => void;
-}) => {
-  const { restaurant, loading, error } = useRestaurantById(
-    discount.restaurantId || null
-  );
-
-  const getTimeLeft = (endDate: string) => {
-    const now = new Date();
-    const end = new Date(endDate);
-    const diff = end.getTime() - now.getTime();
-    if (diff < 0) return "Expired";
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    return `${days}d ${hours}h left`;
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.1 }}
-      className="flex-shrink-0 w-80 sm:w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group"
-    >
-      {/* Image Section */}
-      <div className="relative">
-        <div className="h-48 relative overflow-hidden">
-          {discount.image ? (
-            <Image
-              src={fileUrl(
-                validateEnv().discountBucketId || validateEnv().popularBucketId,
-                discount.image as string
-              )}
-              alt={discount.title}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
-              sizes="(max-width: 640px) 80vw, 384px"
-              quality={85}
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-orange-200 to-red-200 flex items-center justify-center text-4xl">
-              💸
-            </div>
-          )}
-          {/* Discount Badge */}
-          <div className="absolute top-3 left-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-            {discount.discountType === "percentage"
-              ? `${discount.discountValue}%`
-              : `₦${discount.discountValue}`}
-          </div>
-          {/* Active Badge */}
-          {discount.isActive && (
-            <div className="absolute top-3 right-3 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-              <Check className="w-3 h-3" />
-              Active
-            </div>
-          )}
-          {/* Favorite Button */}
-          <button
-            onClick={() => toggleFavorite(discount.$id)}
-            className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm p-2 rounded-full hover:bg-white transition-all duration-200 transform hover:scale-110"
-            aria-label={
-              favorites.has(discount.$id)
-                ? "Remove from favorites"
-                : "Add to favorites"
-            }
-          >
-            <Heart
-              className={`w-4 h-4 ${
-                favorites.has(discount.$id)
-                  ? "fill-red-500 text-red-500"
-                  : "text-gray-600"
-              }`}
-            />
-          </button>
-        </div>
-      </div>
-
-      {/* Content Section */}
-      <div className="p-4 flex flex-col gap-4">
-        <div className="space-y-3">
-          {/* Restaurant Name */}
-          {discount.restaurantId && (
-            <div className="flex items-center gap-2 text-xs text-orange-700 dark:text-orange-300">
-              <Utensils className="w-3 h-3" />
-              {loading === "pending" ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : error ? (
-                <span className="text-xs text-red-500">Error</span>
-              ) : (
-                <span>{restaurant?.name || "Restaurant not found"}</span>
-              )}
-            </div>
-          )}
-
-          {/* Title */}
-          <div className="flex items-start gap-2">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex-1 line-clamp-1">
-              {discount.title}
-            </h3>
-            <button
-              className="bg-orange-100 text-orange-600 p-1.5 rounded-full hover:bg-orange-200 transition-colors"
-              aria-label="View discount details"
-            >
-              <Info className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Scope & Validity */}
-          <div className="flex items-center gap-3 text-xs">
-            <span className="bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-medium">
-              {discount.appliesTo}
-            </span>
-            <div className="flex items-center gap-1">
-              <Clock className="w-3 h-3 text-gray-500" />
-              <span className="font-medium">
-                {getTimeLeft(discount.validTo)}
-              </span>
-            </div>
-          </div>
-
-          {/* Description */}
-          <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2">
-            {discount.description}
-          </p>
-
-          {/* Price & Conditions */}
-          <div className="flex flex-col gap-2">
-            {discount.originalPrice && (
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-bold text-orange-600">
-                  {discount.discountedPrice ||
-                    `Save ${discount.discountValue}${
-                      discount.discountType === "percentage" ? "%" : ""
-                    }`}
-                </span>
-                <span className="text-sm text-gray-400 line-through">
-                  {discount.originalPrice}
-                </span>
-              </div>
-            )}
-            {discount.minOrderValue && (
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Min order: {discount.minOrderValue}
-              </div>
-            )}
-            {discount.code && (
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Code: {discount.code}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <Button
-          aria-label={`Apply ${discount.title}`}
-          onClick={() => handleApplyDeal(discount)}
-          className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-4 py-2 rounded-full font-semibold hover:from-orange-600 hover:to-red-600 transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-opacity-50"
-        >
-          <ShoppingCart className="w-4 h-4 mr-2" />
-          Apply Deal
-        </Button>
-      </div>
-    </motion.div>
-  );
-};
+import { DiscountItem } from "./DiscountItem";
 
 export default function DiscountsList() {
   const [favorites, setFavorites] = useState(new Set<string>());
@@ -214,12 +24,10 @@ export default function DiscountsList() {
   const router = useRouter();
   const { setItem, setIsOpen } = useShowCart();
 
-  // Fetch discounts
   useEffect(() => {
     dispatch(listAsyncDiscounts());
   }, [dispatch]);
 
-  // Filter active and non-expired discounts
   const activeDiscounts = useMemo(() => {
     if (!reduxDiscounts) return [];
 
@@ -233,14 +41,11 @@ export default function DiscountsList() {
     );
   }, [reduxDiscounts]);
 
-  // Randomly select 2 different discounts every time activeDiscounts changes
   const displayedDiscounts = useMemo(() => {
     if (activeDiscounts.length === 0) return [];
 
-    // If 1 or 2 → show all
     if (activeDiscounts.length <= 2) return [...activeDiscounts];
 
-    // 3+ → shuffle and pick first 2
     const shuffled = [...activeDiscounts];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));

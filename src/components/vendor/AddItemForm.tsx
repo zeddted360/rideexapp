@@ -22,22 +22,26 @@ import {
   createAsyncMenuItem,
   listAsyncMenusItem,
   deleteAsyncMenuItem,
+  togglePauseMenuItem,
 } from "@/state/menuSlice";
 import {
   createAsyncDiscount,
   listAsyncDiscounts,
   deleteAsyncDiscount,
+  togglePauseDiscount,
 } from "@/state/discountSlice";
 import toast from "react-hot-toast";
 import {
   createAsyncFeaturedItem,
   listAsyncFeaturedItems,
   deleteAsyncFeaturedItem,
+  togglePauseFeaturedItem,
 } from "@/state/featuredSlice";
 import {
   createAsyncPopularItem,
   listAsyncPopularItems,
   deleteAsyncPopularItem,
+  togglePausePopularItem,
 } from "@/state/popularSlice";
 import { fetchVendorByIdAsync } from "@/state/vendorSlice";
 import {
@@ -69,7 +73,7 @@ import AccountTab from "./AccountTab";
 import EditMenuTab from "./EditMenuTab";
 import { listAsyncExtras } from "@/state/extraSlice";
 import { showErrorToast } from "./CustomToast";
-import { Trash2, Edit2 } from "lucide-react";
+import { Trash2, Edit2, Pause } from "lucide-react";
 import { ItemIndicator } from "@radix-ui/react-select";
 
 const AddFoodItemForm = () => {
@@ -686,117 +690,222 @@ const AddFoodItemForm = () => {
       : popularBucketId;
   };
 
-  const renderItemCard = (
-    item:
-      | IMenuItemFetched
-      | IPopularItemFetched
-      | IFeaturedItemFetched
-      | IDiscountFetched,
-    type: "menu" | "featured" | "popular" | "discount"
-  ) => {
-    let displayName =
-      item.name || (item as IDiscountFetched).title || "Unnamed";
-    let displayDescription = item.description || "No description available.";
-    let displayCategory =
-      item.category ||
-      (type === "discount" ? (item as IDiscountFetched).appliesTo : undefined);
-    let displayPrice = item.price;
-    if (type === "discount") {
-      const discount = item as IDiscountFetched;
-      displayPrice = discount.discountedPrice
-        ? `₦${discount.discountedPrice}`
-        : `-${discount.discountValue}${
-            discount.discountType === "percentage" ? "%" : "₦"
-          }`;
-    }
-    return (
-      <div className="group flex bg-white dark:bg-gray-800 rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 w-full h-[240px] border border-gray-200 dark:border-gray-700">
-        <div className="relative w-64 h-full overflow-hidden flex-shrink-0">
-          <Image
-            src={fileUrl(getBucketId(type), item.image as string)}
-            alt={`${type} item image`}
-            fill
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-            sizes="250px"
-          />
-        </div>
-        <div className="flex-1 p-4 flex flex-col justify-between">
-          <div className="space-y-2">
-            <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg line-clamp-1">
-              {displayName}
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-3">
-              {displayDescription}
-            </p>
-            {displayCategory && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                {displayCategory}
-              </p>
-            )}
-            {type === "menu" && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Cook Time: {item.cookTime}
-              </p>
-            )}
-            {type === "featured" && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Rating: {item.rating || 0}/5
-              </p>
-            )}
-            {type === "popular" && (
-              <>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Rating: {item.rating || 0}/5
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Reviews: {item.reviewCount}
-                </p>
-              </>
-            )}
-            {type === "discount" && (
-              <>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Valid From: {(item as IDiscountFetched).validFrom}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Valid To: {(item as IDiscountFetched).validTo}
-                </p>
-              </>
-            )}
-          </div>
-          <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
-            <span className="text-xl font-bold text-orange-600 dark:text-orange-400">
-              {displayPrice}
-            </span>
-            <div className="flex space-x-2">
-              {/* Edit Button - Improved with icon */}
-              <Button
-                onClick={() => handleEdit(item, type)}
-                aria-label={`Edit ${displayName}`}
-                className="flex items-center justify-center gap-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-3 py-2 rounded-xl font-semibold text-sm hover:from-blue-600 hover:to-blue-700 transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 min-w-[70px]"
-              >
-                <Edit2 className="w-4 h-4" />
-                Edit
-              </Button>
-              {/* Delete Button - Fixed text to "Delete", added icon, improved hover/confirmation prompt */}
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(item, type);
-                }}
-                aria-label={`Delete ${displayName}`}
-                className="flex items-center justify-center gap-1 bg-gradient-to-r from-red-500 to-red-600 text-white px-3 py-2 rounded-xl font-semibold text-sm hover:from-red-600 hover:to-red-700 transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50 min-w-[70px]"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
+ const renderItemCard = (
+   item:
+     | IMenuItemFetched
+     | IPopularItemFetched
+     | IFeaturedItemFetched
+     | IDiscountFetched,
+   type: "menu" | "featured" | "popular" | "discount"
+ ) => {
+   let displayName = item.name || (item as IDiscountFetched).title || "Unnamed";
+   let displayDescription = item.description || "No description available.";
+   let displayCategory =
+     item.category ||
+     (type === "discount" ? (item as IDiscountFetched).appliesTo : undefined);
+   let displayPrice = item.price;
+   if (type === "discount") {
+     const discount = item as IDiscountFetched;
+     displayPrice = discount.discountedPrice
+       ? `₦${discount.discountedPrice}`
+       : `-${discount.discountValue}${
+           discount.discountType === "percentage" ? "%" : "₦"
+         }`;
+   }
+
+   const isOutOfStock = !!item.isPaused;
+
+   return (
+     <div
+       className={`group relative flex bg-white dark:bg-gray-800 rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 w-full h-[240px] border ${
+         isOutOfStock
+           ? "border-gray-300 dark:border-gray-700"
+           : "border-gray-200 dark:border-gray-700"
+       }`}
+     >
+       {/* Modern "Out of Stock" Ribbon Badge */}
+       {isOutOfStock && (
+         <div className="absolute top-3 left-3 z-10">
+           <div className="relative">
+             <div className="bg-red-600 text-white text-xs font-bold px-6 py-2 rounded-full shadow-lg transform -rotate-12">
+               OUT OF STOCK
+             </div>
+             <div className="absolute inset-0 bg-red-700 blur-md opacity-50 rounded-full"></div>
+           </div>
+         </div>
+       )}
+
+       {/* Image Section with Subtle Dim when Out of Stock */}
+       <div className="relative w-64 h-full overflow-hidden flex-shrink-0">
+         <Image
+           src={fileUrl(getBucketId(type), item.image as string)}
+           alt={`${type} item image`}
+           fill
+           className={`object-cover group-hover:scale-105 transition-transform duration-300 ${
+             isOutOfStock ? "brightness-75" : ""
+           }`}
+           sizes="250px"
+         />
+         {/* Optional subtle overlay on image only when out of stock */}
+         {isOutOfStock && (
+           <div className="absolute inset-0 bg-black bg-opacity-10 pointer-events-none"></div>
+         )}
+       </div>
+
+       {/* Content Section */}
+       <div className="flex-1 p-4 flex flex-col justify-between">
+         <div className="space-y-2">
+           <h3
+             className={`font-bold text-lg line-clamp-1 ${
+               isOutOfStock
+                 ? "text-gray-500 dark:text-gray-400"
+                 : "text-gray-900 dark:text-gray-100"
+             }`}
+           >
+             {displayName}
+           </h3>
+           <p
+             className={`text-sm leading-relaxed line-clamp-3 ${
+               isOutOfStock
+                 ? "text-gray-400 dark:text-gray-500"
+                 : "text-gray-600 dark:text-gray-400"
+             }`}
+           >
+             {displayDescription}
+           </p>
+           {displayCategory && (
+             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+               {displayCategory}
+             </p>
+           )}
+           {type === "menu" && (
+             <p className="text-xs text-gray-500 dark:text-gray-400">
+               Cook Time: {item.cookTime}
+             </p>
+           )}
+           {type === "featured" && (
+             <p className="text-xs text-gray-500 dark:text-gray-400">
+               Rating: {item.rating || 0}/5
+             </p>
+           )}
+           {type === "popular" && (
+             <>
+               <p className="text-xs text-gray-500 dark:text-gray-400">
+                 Rating: {item.rating || 0}/5
+               </p>
+               <p className="text-xs text-gray-500 dark:text-gray-400">
+                 Reviews: {item.reviewCount}
+               </p>
+             </>
+           )}
+           {type === "discount" && (
+             <>
+               <p className="text-xs text-gray-500 dark:text-gray-400">
+                 Valid From: {(item as IDiscountFetched).validFrom}
+               </p>
+               <p className="text-xs text-gray-500 dark:text-gray-400">
+                 Valid To: {(item as IDiscountFetched).validTo}
+               </p>
+             </>
+           )}
+         </div>
+
+         <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+           <span
+             className={`text-xl font-bold ${
+               isOutOfStock
+                 ? "text-gray-400 dark:text-gray-500"
+                 : "text-orange-600 dark:text-orange-400"
+             }`}
+           >
+             {displayPrice}
+           </span>
+           <div className="flex space-x-2">
+             {/* Edit Button - Slightly dimmed when out of stock */}
+             <Button
+               onClick={() => handleEdit(item, type)}
+               aria-label={`Edit ${displayName}`}
+               className={`flex items-center justify-center gap-1 px-3 py-2 rounded-xl font-semibold text-sm transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 min-w-[70px] ${
+                 isOutOfStock
+                   ? "bg-gray-400 text-gray-700 hover:bg-gray-500"
+                   : "bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 focus:ring-blue-400"
+               }`}
+             >
+               <Edit2 className="w-4 h-4" />
+               Edit
+             </Button>
+
+             {/* Pause/Resume Button */}
+             <Button
+               onClick={() => {
+                 let action;
+                 switch (type) {
+                   case "menu":
+                     action = togglePauseMenuItem({
+                       itemId: item.$id,
+                       isPaused: !item.isPaused,
+                     });
+                     break;
+                   case "featured":
+                     action = togglePauseFeaturedItem({
+                       itemId: item.$id,
+                       isPaused: !item.isPaused,
+                     });
+                     break;
+                   case "popular":
+                     action = togglePausePopularItem({
+                       itemId: item.$id,
+                       isPaused: !item.isPaused,
+                     });
+                     break;
+                   case "discount":
+                     action = togglePauseDiscount({
+                       id: item.$id,
+                       isPaused: !item.isPaused,
+                     });
+                     break;
+                 }
+                 if (action) {
+                   dispatch(action as any);
+                 }
+               }}
+               aria-label={`${
+                 isOutOfStock ? "Resume" : "Pause"
+               } ${displayName}`}
+               className={`flex items-center justify-center gap-1 px-3 py-2 rounded-xl font-semibold text-sm transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 min-w-[70px] ${
+                 isOutOfStock
+                   ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white focus:ring-green-400"
+                   : "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white focus:ring-yellow-400"
+               }`}
+             >
+               <Pause className="w-4 h-4" />
+               {isOutOfStock ? "Resume" : "Pause"}
+             </Button>
+
+             {/* Delete Button - Slightly dimmed when out of stock */}
+             <Button
+               onClick={(e) => {
+                 e.stopPropagation();
+                 handleDelete(item, type);
+               }}
+               aria-label={`Delete ${displayName}`}
+               className={`flex items-center justify-center gap-1 px-3 py-2 rounded-xl font-semibold text-sm transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 min-w-[70px] ${
+                 isOutOfStock
+                   ? "bg-gray-400 text-gray-700 hover:bg-gray-500"
+                   : "bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 focus:ring-red-400"
+               }`}
+             >
+               <Trash2 className="w-4 h-4" />
+               Delete
+             </Button>
+           </div>
+         </div>
+       </div>
+     </div>
+   );
+ };
+  
   const filteredSubTabs = useMemo(() => {
     const allTabs = [
       { id: "menu", label: "Menu Items" },

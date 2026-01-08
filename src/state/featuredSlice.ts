@@ -193,6 +193,36 @@ export const deleteAsyncFeaturedItem = createAsyncThunk<
   }
 );
 
+export const togglePauseFeaturedItem = createAsyncThunk<
+  IFeaturedItemFetched,
+  { itemId: string; isPaused: boolean },
+  { rejectValue: string }
+>(
+  "menuItem/togglePauseMenuItem",
+  async ({ itemId, isPaused }, { rejectWithValue }) => {
+    try {
+      const { databaseId, featuredId } = validateEnv();
+
+      const updatedDocument = await databases.updateDocument(
+        databaseId,
+        featuredId,
+        itemId,
+        { isPaused }
+      );
+
+      toast.success(
+        `Menu item ${isPaused ? "paused" : "resumed"} successfully!`
+      );
+      return updatedDocument as IFeaturedItemFetched;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to toggle pause for menu item: ${errorMsg}`);
+      return rejectWithValue(errorMsg);
+    }
+  }
+);
+
+
 export const featuredItemSlice = createSlice({
   name: "featuredItem",
   initialState,
@@ -310,7 +340,34 @@ export const featuredItemSlice = createSlice({
           state.loading = "failed";
           state.error = action.payload || "Failed to delete featured item";
         }
+      )
+      .addCase(togglePauseFeaturedItem.pending, (state) => {
+        state.loading = "pending";
+        state.error = null;
+      })
+      .addCase(
+        togglePauseFeaturedItem.fulfilled,
+        (state, action: PayloadAction<IFeaturedItemFetched>) => {
+          state.loading = "succeeded";
+          const index = state.featuredItems.findIndex(
+            (d) => d.$id === action.payload.$id
+          );
+          if (index !== -1) {
+            state.featuredItems[index] = action.payload;
+          }
+          state.error = null;
+        }
+      )
+      .addCase(
+        togglePauseFeaturedItem.rejected,
+        (state, action: PayloadAction<string | undefined>) => {
+          state.loading = "failed";
+          state.error = action.payload || "Failed to toggle pause discount";
+        }
       );
+
+;
+    
   },
 });
 
